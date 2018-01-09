@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="NBXplorer.Client" Version="1.0.0.21" />
+    <ProjectReference Include="..\NBXplorer\NBXplorer.Client\NBXplorer.Client.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.JSON" Version="10.0.3" />
   </ItemGroup>
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>

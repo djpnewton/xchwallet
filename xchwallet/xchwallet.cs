@@ -5,13 +5,14 @@ namespace xchwallet
 {
     public interface IAddress
     {
-        int Id { get; }
         string Tag { get; }
+        string Path { get; }
         string Address { get; }
     }
 
     public interface ITransaction
     {
+        string Id { get; }
         string From { get; }
         string To { get; }
         UInt64 Amount { get; }
@@ -21,34 +22,49 @@ namespace xchwallet
     public interface IWallet
     {
         bool IsMainnet();
-        IAddress NewAddress(int id, string tag);
-        List<ITransaction> GetTransactions(string address);
+        IAddress NewAddress(string tag);
+        IEnumerable<ITransaction> GetTransactions(string address);
     }
 
     public class BaseAddress : IAddress
     {
-        public int Id { get; }
         public string Tag { get; }
+        public string Path { get; }
         public string Address { get; }
 
-        public BaseAddress(int id, string tag, string address)
+        public BaseAddress(string tag, string path, string address)
         {
-            this.Id = id;
             this.Tag = tag;
+            this.Path = path;
             this.Address = address;
         }
 
         public override string ToString()
         {
-            return $"{Id} - '{Tag}' - {Address}";
+            return $"'{Tag}' - {Path} - {Address}";
         }
     }
 
     public class BaseTransaction : ITransaction
     {
+        public string Id { get; }
         public string From { get; }
         public string To { get; }
         public UInt64 Amount { get; }
         public int Confirmations { get; }
+
+        public BaseTransaction(string id, string from, string to, UInt64 amount, int confirmations)
+        {
+            this.Id = id;
+            this.From = from;
+            this.To = to;
+            this.Amount = amount;
+            this.Confirmations = confirmations;
+        }
+
+        public override string ToString()
+        {
+            return $"<{Id} {From} {To} {Amount} {Confirmations}>";
+        }
     }
 }
