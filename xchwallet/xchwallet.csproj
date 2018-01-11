@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\NBXplorer\NBXplorer.Client\NBXplorer.Client.csproj" />
+    <ProjectReference Include="..\Nethereum\src\Nethereum.Web3\Nethereum.Web3.csproj" />
+    <ProjectReference Include="..\Nethereum\src\Nethereum.HDWallet\Nethereum.HdWallet.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.JSON" Version="10.0.3" />
