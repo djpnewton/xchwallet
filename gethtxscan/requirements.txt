@@ -1,0 +1,8 @@
+#pip install -r requirements.txt
+ConfigParser
+marshmallow
+flask
+Flask-SQLAlchemy
+web3==v4.0.0-beta.5
+gevent
+daemonize

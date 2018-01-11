@@ -1,3 +1,6 @@
 [submodule "NBXplorer"]
 	path = NBXplorer
 	url = ./NBXplorer
+[submodule "Nethereum"]
+	path = Nethereum
+	url = ./Nethereum

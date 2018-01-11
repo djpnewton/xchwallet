@@ -1,0 +1,22 @@
+from gethtxscan.models import Setting
+
+def set_value(db_session, keyname, value):
+    setting = Setting.query.filter(Setting.key == keyname).first()
+    if not setting:
+        setting = Setting(keyname, value)
+    else:
+        setting.value = value
+    db_session.add(setting)
+    db_session.commit()
+
+def get_value(keyname, default):
+    setting = Setting.query.filter(Setting.key == keyname).first()
+    if not setting:
+        return default
+    return setting.value
+
+def set_current_block_number(db_session, blocknum):
+    set_value(db_session, "currentblock", blocknum)
+
+def get_current_block_number(default):
+    return int(get_value("currentblock", default))
