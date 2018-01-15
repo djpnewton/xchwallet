@@ -1,6 +1,6 @@
 [submodule "NBXplorer"]
 	path = NBXplorer
-	url = ./NBXplorer
+	url = https://github.com/dgarage/NBXplorer.git
 [submodule "Nethereum"]
 	path = Nethereum
-	url = ./Nethereum
+	url = https://github.com/Nethereum/Nethereum.git
