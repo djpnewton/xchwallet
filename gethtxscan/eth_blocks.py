@@ -19,7 +19,10 @@ def get_current_block_number():
 def get_block_hash_and_txs(block_num, addresses):
     txs = {}
     block = web3.eth.getBlock(block_num, True)
-    for tx in block.transactions:
+    block_transactions = block.transactions
+    if not block_transactions:
+        block_transactions = []
+    for tx in block_transactions:
         # remove from pending_txs if found in a block
         if tx["hash"] in pending_txs:
             del pending_txs[tx["hash"]]
@@ -30,7 +33,7 @@ def get_block_hash_and_txs(block_num, addresses):
                     txs[to].append(tx)
                 else:
                     txs[to] = [tx]
-    return block.hash, txs, len(block.transactions)
+    return block.hash, txs, len(block_transactions)
 
 def get_block_hash(block_num):
     block = web3.eth.getBlock(block_num, False)
