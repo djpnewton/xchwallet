@@ -73,7 +73,7 @@ def list_transactions(account):
     acct = Account.from_address(db_session, account.lower())
     txs = []
     for tx in acct.transactions:
-        txs.append(tx.txid)
+        txs.append(tx.to_json())
     return jsonify(txs)
 
 @app.route("/incomming_value/<account>")

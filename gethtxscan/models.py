@@ -3,7 +3,7 @@ import sqlalchemy.types as types
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import func
 from sqlalchemy import or_, and_, desc
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, pre_dump
 import time
 from database import Base
 from config import Cfg
@@ -13,6 +13,11 @@ cfg = Cfg()
 class TransactionSchema(Schema):
     txid = fields.String()
     value = fields.String()
+
+    @pre_dump
+    def hexify_txid(self, obj):
+        obj.txid = obj.txid.hex()
+        return obj
 
 class BigInt(types.TypeDecorator):
     """Convert ints to string in db and back to int on the way out."""
