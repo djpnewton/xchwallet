@@ -2,6 +2,7 @@
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Net;
 using Nethereum.Web3;
 using Nethereum.HdWallet;
 using Newtonsoft.Json;
@@ -39,6 +40,8 @@ namespace xchwallet
         const string PATH = "m/44'/60'/0'/x";
 
         Web3 web3 = null;
+        string gethTxScanAddress = null;
+        WebClient scanClient = null;
         Wallet wallet = null;
 
         WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AcctTxs(), LastPathIndex = 0};
@@ -60,7 +63,7 @@ namespace xchwallet
             return byteArray;
         }
 
-        public EthWallet(string seedHex, string filename, bool mainNet, string gethAddress)
+        public EthWallet(string seedHex, string filename, bool mainNet, string gethAddress, string gethTxScanAddress)
         {
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
@@ -70,6 +73,10 @@ namespace xchwallet
 
             // create web3 client
             web3 = new Web3(gethAddress);
+
+            // create http client
+            this.gethTxScanAddress = gethTxScanAddress;
+            scanClient = new WebClient();
 
             this.mainNet = mainNet;
             /*TODO:!!!
@@ -96,10 +103,12 @@ namespace xchwallet
 
         public IAddress NewAddress(string tag)
         {
+            var pathIndex = wd.LastPathIndex + 1;
             // create new address that is unused
-            wd.LastPathIndex++;
-            var acct = wallet.GetAccount(wd.LastPathIndex);
-            var address = new EthAccount(tag, PATH.Replace("x", wd.LastPathIndex.ToString()), acct.Address, wd.LastPathIndex);
+            var acct = wallet.GetAccount(pathIndex);
+            var address = new EthAccount(tag, PATH.Replace("x", pathIndex.ToString()), acct.Address, pathIndex);
+            // regsiter address with gethtxscan
+            scanClient.DownloadString(gethTxScanAddress + "/watch_account/" + acct.Address);
             // add to address list
             if (wd.Accounts.ContainsKey(tag))
                 wd.Accounts[tag].Add(address);
@@ -109,12 +118,48 @@ namespace xchwallet
                 list.Add(address);
                 wd.Accounts[tag] = list;
             }
+            // update last path index and return address
+            wd.LastPathIndex = pathIndex;
             return address;
+        }
+
+        struct scantx
+        {
+            public string txid;
+            public ulong value;
+        }
+
+        void UpdateTxs(string address)
+        {
+            var json = scanClient.DownloadString(gethTxScanAddress + "/list_transactions/" + address);
+            var scantxs = JsonConvert.DeserializeObject<List<scantx>>(json);
+            foreach (var scantx in scantxs)
+            {
+                var tx = new EthTransaction(scantx.txid, "", address, scantx.value, -1);
+                List<EthTransaction> txs = null;
+                if (wd.Txs.ContainsKey(tx.To))
+                    txs = wd.Txs[tx.To];
+                else
+                    txs = new List<EthTransaction>();
+                bool replacedTx = false;
+                for (var i = 0; i < txs.Count; i++)
+                {
+                    if (txs[i].Id == tx.Id)
+                    {
+                        txs[i] = tx;
+                        replacedTx = true;
+                        break;
+                    }
+                }
+                if (!replacedTx)
+                    txs.Add(tx);
+                wd.Txs[tx.To] = txs;
+            }
         }
 
         public IEnumerable<ITransaction> GetTransactions(string address)
         {
-            //TODO:!! UpdateTxs();
+            UpdateTxs(address);
             if (wd.Txs.ContainsKey(address))
                 return wd.Txs[address];
             return new List<ITransaction>(); 

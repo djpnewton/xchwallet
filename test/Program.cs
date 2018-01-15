@@ -21,7 +21,7 @@ namespace test
             */
 
             var filename = Path.Combine(Directory.GetCurrentDirectory(), "wallet_eth.json");
-            var wallet = new EthWallet("12345678901234567890123456789012", filename, false, "https://ropsten.infura.io");
+            var wallet = new EthWallet("12345678901234567890123456789012", filename, false, "https://ropsten.infura.io", "http://localhost:5001");
             //Console.WriteLine(wallet.NewAddress("blah"));
             //Console.WriteLine(wallet.NewAddress("blah2"));
             var txs = wallet.GetTransactions("0x64E43D4f6023b6c8a644D06Ff60765F9C0ceF2Ec");
