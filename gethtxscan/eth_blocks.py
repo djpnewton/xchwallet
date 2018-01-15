@@ -82,16 +82,16 @@ def check_tx_filter(logger, filter):
     def get_pending_tx_record(txid):
         tx = web3.eth.getTransaction(txid)
         if not tx:
-            logger.error("could not get tx info (%s)" % txid)
+            logger.error("could not get tx info (%s)" % txid.hex())
         elif tx["to"]:
             tx = {"to": tx["to"].lower(), "hash": tx["hash"], "value": tx["value"]}
             return (time.time(), tx)
         else:
-            logger.info("could not get tx 'to' info, possibly contract stuff (%s)" % txid)
+            logger.info("could not get tx 'to' info, possibly contract stuff (%s)" % txid.hex())
 
     seen_txids = filter.get_new_entries()
     for txid in seen_txids:
-        logger.info("!new tx! {0}".format(txid))
+        logger.info("!new tx! {0}".format(txid.hex()))
         # add transaction to pending transaction pool
         if not txid in pending_txs:
             record = None
