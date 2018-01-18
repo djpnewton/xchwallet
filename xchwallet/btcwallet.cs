@@ -66,6 +66,11 @@ namespace xchwallet
             return client.Network == Network.Main;
         }
 
+        public bool ContainsAddress(string address)
+        {
+                return true;
+        }
+
         public IAddress NewAddress(string tag)
         {
             // create new address that is unused

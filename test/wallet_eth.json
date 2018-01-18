@@ -1,0 +1,14 @@
+{
+  "Accounts": {
+    "blah": [
+      {
+        "PathIndex": 1,
+        "Tag": "blah",
+        "Path": "m/44'/60'/0'/1",
+        "Address": "0x90A0420D467Ae151dA8e700dCb4F67ec213660c5"
+      }
+    ]
+  },
+  "Txs": {},
+  "LastPathIndex": 1
+}

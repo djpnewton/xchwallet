@@ -22,6 +22,7 @@ namespace xchwallet
     public interface IWallet
     {
         bool IsMainnet();
+        bool ContainsAddress(string address);
         IAddress NewAddress(string tag);
         IEnumerable<ITransaction> GetTransactions(string address);
     }

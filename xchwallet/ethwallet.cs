@@ -101,6 +101,25 @@ namespace xchwallet
             return mainNet;
         }
 
+        public bool ContainsAddress(string address)
+        {
+            bool flag = false;
+             if (wd.Accounts.Count>0)
+             {  
+                foreach(var item in wd.Accounts)
+                {
+                    foreach (var acct in item.Value)
+                       if(acct.Address==address)
+                       {
+                            flag= true;
+                            break;
+                       }
+                }
+                                  
+             } 
+             return flag;
+        }
+
         public IAddress NewAddress(string tag)
         {
             var pathIndex = wd.LastPathIndex + 1;
