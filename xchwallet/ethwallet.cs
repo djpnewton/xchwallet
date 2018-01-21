@@ -103,6 +103,7 @@ namespace xchwallet
 
         public bool ContainsAddress(string address)
         {
+            // create a flag default false
             bool flag = false;
              if (wd.Accounts.Count>0)
              {  
