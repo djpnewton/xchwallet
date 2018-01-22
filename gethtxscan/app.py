@@ -48,7 +48,7 @@ def shutdown_session(exception=None):
 def root():
     last_block = Block.last_block(db_session)
     num_accounts = Account.count(db_session)
-    return "last block: %d, %s<br/>number of accounts tracked: %d" % (last_block.num, last_block.hash, num_accounts)
+    return "last block: %d, %s<br/>number of accounts tracked: %d" % (last_block.num, last_block.hash.hex(), num_accounts)
 
 @app.route("/watch_account/<account>")
 def watch_account(account):
@@ -73,7 +73,8 @@ def list_transactions(account):
     acct = Account.from_address(db_session, account.lower())
     txs = []
     for tx in acct.transactions:
-        txs.append(tx.to_json())
+        block_num = Block.tx_block_num(db_session, tx.block_id)
+        txs.append(tx.to_json(block_num))
     return jsonify(txs)
 
 @app.route("/incomming_value/<account>")

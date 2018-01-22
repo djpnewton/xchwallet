@@ -23,9 +23,16 @@ class BlockCheckGreenlet(Greenlet):
 
     def _run(self):
         fltr = pending_tx_filter()
+        tx_not_seen_counter = 0
         while True:
             gevent.sleep(self.delay)
-            check_tx_filter(self.logger, fltr)
+            # check for new pending transactions
+            if not check_tx_filter(self.logger, fltr):
+                # replace pending tx filter if it gets stale
+                tx_not_seen_counter += 1
+                if tx_not_seen_counter > 10:
+                    fltr = pending_tx_filter()
+            # check for new blocks
             self.block_check()
 
     def block_check(self):
@@ -47,6 +54,9 @@ class BlockCheckGreenlet(Greenlet):
         if block:
             any_reorgs = False
             block_hash = get_block_hash(block_num)
+            if not block_hash:
+                self.logger.error("unable to get hash for block %d" % block_num)
+                return
             while block_hash != block.hash:
                 self.logger.info("block %d hash does not match current blockchain, must have been reorged" % block_num)
                 block.set_reorged(db_session)
@@ -75,7 +85,7 @@ class BlockCheckGreenlet(Greenlet):
             # check for reorged blocks now reorged *back* into the main chain
             block = Block.from_hash(db_session, block_hash)
             if block:
-                self.logger.info("block %s (was #%d) now un-reorged" % (block_hash, block.num))
+                self.logger.info("block %s (was #%d) now un-reorged" % (block_hash.hex(), block.num))
                 block.num = block_num
                 block.reorged = False
             else:
@@ -85,7 +95,7 @@ class BlockCheckGreenlet(Greenlet):
             for key in txs.keys():
                 self.logger.info("adding txs for " + key)
                 for tx in txs[key]:
-                    self.logger.info(" - %s, %s" % (tx["hash"], tx["value"]))
+                    self.logger.info(" - %s, %s" % (tx["hash"].hex(), tx["value"]))
                 Account.add_txs(db_session, key, block.id, txs[key])
             db_session.commit()
             current_scanned_block = block_num
@@ -97,7 +107,7 @@ class BlockCheckGreenlet(Greenlet):
         for key in txs.keys():
             self.logger.info("adding txs for " + key)
             for tx in txs[key]:
-                self.logger.info(" - %s, %s" % (tx["hash"], tx["value"]))
+                self.logger.info(" - %s, %s" % (tx["hash"].hex(), tx["value"]))
             Account.add_txs(db_session, key, None, txs[key])
         db_session.commit()
         self.logger.info("!pending! tx scan took %f seconds (%d addresses, %d txs)" % (time.time() - start, len(addresses), tx_count))

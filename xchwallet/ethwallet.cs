@@ -24,7 +24,7 @@ namespace xchwallet
 
     public class EthTransaction : BaseTransaction
     {
-        public EthTransaction(string id, string from, string to, UInt64 amount, int confirmations) : base(id, from, to, amount, confirmations)
+        public EthTransaction(string id, string from, string to, ulong amount, long confirmations) : base(id, from, to, amount, confirmations)
         {}
     }
 
@@ -126,16 +126,25 @@ namespace xchwallet
         struct scantx
         {
             public string txid;
+            public string from_;
+            public string to;
             public ulong value;
+            public long block_num;
         }
 
         void UpdateTxs(string address)
         {
+            var blockNumTask = web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
+            blockNumTask.Wait();
+            var blockNum = (long)blockNumTask.Result.Value;
             var json = scanClient.DownloadString(gethTxScanAddress + "/list_transactions/" + address);
             var scantxs = JsonConvert.DeserializeObject<List<scantx>>(json);
             foreach (var scantx in scantxs)
             {
-                var tx = new EthTransaction(scantx.txid, "", address, scantx.value, -1);
+                long confirmations = 0;
+                if (scantx.block_num > 0)
+                    confirmations = blockNum - scantx.block_num;
+                var tx = new EthTransaction(scantx.txid, scantx.from_, address, scantx.value, confirmations);
                 List<EthTransaction> txs = null;
                 if (wd.Txs.ContainsKey(tx.To))
                     txs = wd.Txs[tx.To];

@@ -15,8 +15,8 @@ namespace xchwallet
         string Id { get; }
         string From { get; }
         string To { get; }
-        UInt64 Amount { get; }
-        int Confirmations { get; }
+        ulong Amount { get; }
+        long Confirmations { get; }
     }
 
     public interface IWallet
@@ -50,10 +50,10 @@ namespace xchwallet
         public string Id { get; }
         public string From { get; }
         public string To { get; }
-        public UInt64 Amount { get; }
-        public int Confirmations { get; }
+        public ulong Amount { get; }
+        public long Confirmations { get; }
 
-        public BaseTransaction(string id, string from, string to, UInt64 amount, int confirmations)
+        public BaseTransaction(string id, string from, string to, ulong amount, long confirmations)
         {
             this.Id = id;
             this.From = from;

@@ -37,24 +37,11 @@ def get_block_hash_and_txs(block_num, addresses):
 
 def get_block_hash(block_num):
     block = web3.eth.getBlock(block_num, False)
-    return block.hash
+    if block:
+        return block.hash
+    return None
 
 def scan_pending_txs(addresses):
-    #pending = web3.txpool.content["pending"]
-    #
-    #txs = {}
-    #for addr in pending.keys():
-    #    for nonce in pending[addr].keys():
-    #        tx = pending[addr][nonce]
-    #        if tx["to"]:
-    #            to = tx["to"].lower()
-    #            if to in addresses:
-    #                if txs.has_key(to):
-    #                    txs[to].append(tx)
-    #                else:
-    #                    txs[to] = [tx]
-    #return txs
-
     txs = {}
     remove = []
     _5hours = 60 * 60 * 5
@@ -84,7 +71,7 @@ def check_tx_filter(logger, filter):
         if not tx:
             logger.error("could not get tx info (%s)" % txid.hex())
         elif tx["to"]:
-            tx = {"to": tx["to"].lower(), "hash": tx["hash"], "value": tx["value"]}
+            tx = {"to": tx["to"].lower(), "from": tx["from"].lower(), "hash": tx["hash"], "value": tx["value"]}
             return (time.time(), tx)
         else:
             logger.info("could not get tx 'to' info, possibly contract stuff (%s)" % txid.hex())
@@ -98,6 +85,7 @@ def check_tx_filter(logger, filter):
             record = get_pending_tx_record(txid)
             if record:
                 pending_txs[txid] = record
+    return seen_txids
 
 def get_pending_txs():
     return pending_txs

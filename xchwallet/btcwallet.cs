@@ -19,7 +19,7 @@ namespace xchwallet
 
     public class BtcTransaction : BaseTransaction
     {
-        public BtcTransaction(string id, string from, string to, UInt64 amount, int confirmations) : base(id, from, to, amount, confirmations)
+        public BtcTransaction(string id, string from, string to, ulong amount, long confirmations) : base(id, from, to, amount, confirmations)
         {}
     }
 
