@@ -103,8 +103,6 @@ namespace xchwallet
 
         public bool ContainsAddress(string address)
         {
-            // create a flag default false
-            bool flag = false;
              if (wd.Accounts.Count>0)
              {  
                 foreach(var item in wd.Accounts)
@@ -112,13 +110,11 @@ namespace xchwallet
                     foreach (var acct in item.Value)
                        if(acct.Address==address)
                        {
-                            flag= true;
-                            break;
+                            return true;
                        }
                 }
-                                  
              } 
-             return flag;
+             return false;
         }
 
         public IAddress NewAddress(string tag)
