@@ -20,7 +20,7 @@ namespace test
             wallet.Save(filename);
             */
 
-            var filename = Path.Combine(Directory.GetCurrentDirectory(), "wallet_eth.json");
+       
             var wallet = new EthWallet("12345678901234567890123456789013", filename, false, "https://ropsten.infura.io", "http://localhost:5001");
             if (!wallet.ContainsAddress("0x90A0420D467Ae151dA8e700dCb4F67ec213660c5"))
                 Console.WriteLine(wallet.NewAddress("blah2"));

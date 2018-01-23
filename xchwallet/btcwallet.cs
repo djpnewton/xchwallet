@@ -70,7 +70,7 @@ namespace xchwallet
         {
             if(wd.Addresses.Count>0)
             {
-                    foreach(var item in wd.Accounts)
+                foreach(var item in wd.Accounts)
                 {
                     foreach (var acct in item.Value)
                        if(acct.Address==address)
@@ -78,7 +78,6 @@ namespace xchwallet
                             return true;
                        }
                 }
-
             }
                 return false;
         }
