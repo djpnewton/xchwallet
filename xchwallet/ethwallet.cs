@@ -79,14 +79,14 @@ namespace xchwallet
             scanClient = new WebClient();
 
             this.mainNet = mainNet;
-            /*TODO:!!!
+            var netVersionTask = web3.Net.Version.SendRequestAsync();
+            netVersionTask.Wait();
             if (mainNet)
-                if (!web3.version.network == 1)
+                if (netVersionTask.Result != "1")
                     throw new Exception("client is on wrong network");
             if (!mainNet)
-                if (!web3.version.network == 3)
+                if (netVersionTask.Result != "3")
                     throw new Exception("client is on wrong network");
-            */
         }
 
         public void Save(string filename)
