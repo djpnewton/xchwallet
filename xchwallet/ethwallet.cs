@@ -174,5 +174,18 @@ namespace xchwallet
                 return wd.Txs[address];
             return new List<ITransaction>(); 
         }
+
+        public BigInteger GetBalance(string address)
+        {
+            UpdateTxs(address);
+            if (wd.Txs.ContainsKey(address))
+            {
+                BigInteger total = 0;
+                foreach (var tx in wd.Txs[address])
+                    total += tx.Amount;
+                return total;
+            }
+            return 0;
+        }
     }
 }
