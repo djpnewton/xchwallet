@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Numerics;
 using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
@@ -19,7 +20,7 @@ namespace xchwallet
 
     public class BtcTransaction : BaseTransaction
     {
-        public BtcTransaction(string id, string from, string to, ulong amount, long confirmations) : base(id, from, to, amount, confirmations)
+        public BtcTransaction(string id, string from, string to, BigInteger amount, long confirmations) : base(id, from, to, amount, confirmations)
         {}
     }
 
@@ -94,7 +95,7 @@ namespace xchwallet
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network);
             var id = utxo.Outpoint.Hash;
-            var tx = new BtcTransaction(id.ToString(), "", to.ToString(), (ulong)utxo.Value.Satoshi, utxo.Confirmations);
+            var tx = new BtcTransaction(id.ToString(), "", to.ToString(), utxo.Value.Satoshi, utxo.Confirmations);
             List<BtcTransaction> txs = null;
             if (wd.Txs.ContainsKey(tx.To))
                 txs = wd.Txs[tx.To];

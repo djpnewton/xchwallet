@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace xchwallet
 {
@@ -15,7 +16,7 @@ namespace xchwallet
         string Id { get; }
         string From { get; }
         string To { get; }
-        ulong Amount { get; }
+        BigInteger Amount { get; }
         long Confirmations { get; }
     }
 
@@ -50,10 +51,10 @@ namespace xchwallet
         public string Id { get; }
         public string From { get; }
         public string To { get; }
-        public ulong Amount { get; }
+        public BigInteger Amount { get; }
         public long Confirmations { get; }
 
-        public BaseTransaction(string id, string from, string to, ulong amount, long confirmations)
+        public BaseTransaction(string id, string from, string to, BigInteger amount, long confirmations)
         {
             this.Id = id;
             this.From = from;

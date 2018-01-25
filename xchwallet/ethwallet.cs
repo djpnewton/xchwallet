@@ -3,6 +3,7 @@ using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
 using System.Net;
+using System.Numerics;
 using Nethereum.Web3;
 using Nethereum.HdWallet;
 using Newtonsoft.Json;
@@ -24,7 +25,7 @@ namespace xchwallet
 
     public class EthTransaction : BaseTransaction
     {
-        public EthTransaction(string id, string from, string to, ulong amount, long confirmations) : base(id, from, to, amount, confirmations)
+        public EthTransaction(string id, string from, string to, BigInteger amount, long confirmations) : base(id, from, to, amount, confirmations)
         {}
     }
 
@@ -128,7 +129,7 @@ namespace xchwallet
             public string txid;
             public string from_;
             public string to;
-            public ulong value;
+            public string value;
             public long block_num;
         }
 
@@ -144,7 +145,7 @@ namespace xchwallet
                 long confirmations = 0;
                 if (scantx.block_num > 0)
                     confirmations = blockNum - scantx.block_num;
-                var tx = new EthTransaction(scantx.txid, scantx.from_, address, scantx.value, confirmations);
+                var tx = new EthTransaction(scantx.txid, scantx.from_, address, BigInteger.Parse(scantx.value), confirmations);
                 List<EthTransaction> txs = null;
                 if (wd.Txs.ContainsKey(tx.To))
                     txs = wd.Txs[tx.To];
