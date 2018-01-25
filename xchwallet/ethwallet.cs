@@ -103,12 +103,12 @@ namespace xchwallet
 
         public bool ContainsAddress(string address)
         {
-            foreach (var item in wd.Accounts)
+             foreach (var item in wd.Accounts)
             {
                 foreach (var acct in item.Value)
                 if (acct.Address==address)
                 {
-                        return true;
+                    return true;
                 }
             }
             return false;

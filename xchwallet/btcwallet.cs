@@ -77,7 +77,7 @@ namespace xchwallet
                         return true;
                     }
             }
-                return false;
+            return false;
         }
 
         public IAddress NewAddress(string tag)
