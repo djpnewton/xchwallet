@@ -20,11 +20,11 @@ namespace test
             wallet.Save(filename);
             */
 
-       
-            var wallet = new EthWallet("12345678901234567890123456789013", filename, false, "https://ropsten.infura.io", "http://localhost:5001");
-            if (!wallet.ContainsAddress("0x90A0420D467Ae151dA8e700dCb4F67ec213660c5"))
-                Console.WriteLine(wallet.NewAddress("blah2"));
-            var txs = wallet.GetTransactions("0x90A0420D467Ae151dA8e700dCb4F67ec213660c5");
+            var filename = Path.Combine(Directory.GetCurrentDirectory(), "wallet_eth.json");
+            var wallet = new EthWallet("12345678901234567890123456789012", filename, false, "https://ropsten.infura.io", "http://localhost:5001");
+            //Console.WriteLine(wallet.NewAddress("blah"));
+            //Console.WriteLine(wallet.NewAddress("blah2"));
+            var txs = wallet.GetTransactions("0x64E43D4f6023b6c8a644D06Ff60765F9C0ceF2Ec");
             foreach (var tx in txs)
                 Console.WriteLine($"  {tx}");
             wallet.Save(filename);
