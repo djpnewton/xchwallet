@@ -106,10 +106,10 @@ namespace xchwallet
              foreach (var item in wd.Accounts)
             {
                 foreach (var acct in item.Value)
-                if (acct.Address==address)
-                {
-                    return true;
-                }
+                    if (acct.Address==address)
+                    {
+                        return true;
+                    }
             }
             return false;
         }
