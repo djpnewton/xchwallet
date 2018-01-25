@@ -124,6 +124,13 @@ namespace xchwallet
             return address;
         }
 
+        public IEnumerable<IAddress> GetAddresses(string tag)
+        {
+            if (wd.Accounts.ContainsKey(tag))
+                return wd.Accounts[tag];
+            return new List<IAddress>();
+        }
+
         struct scantx
         {
             public string txid;
@@ -167,7 +174,26 @@ namespace xchwallet
             }
         }
 
-        public IEnumerable<ITransaction> GetTransactions(string address)
+        void AddTxs(List<ITransaction> txs, string address)
+        {
+            if (wd.Txs.ContainsKey(address))
+                foreach (var tx in wd.Txs[address])
+                    txs.Add(tx);
+        }
+
+        public IEnumerable<ITransaction> GetTransactions(string tag)
+        {
+            var txs = new List<ITransaction>(); 
+            if (wd.Accounts.ContainsKey(tag))
+                foreach (var item in wd.Accounts[tag])
+                {
+                    UpdateTxs(item.Address);
+                    AddTxs(txs, item.Address);
+                }
+            return txs;
+        }
+
+        public IEnumerable<ITransaction> GetAddrTransactions(string address)
         {
             UpdateTxs(address);
             if (wd.Txs.ContainsKey(address))
@@ -175,7 +201,19 @@ namespace xchwallet
             return new List<ITransaction>(); 
         }
 
-        public BigInteger GetBalance(string address)
+        public BigInteger GetBalance(string tag)
+        {
+            if (wd.Accounts.ContainsKey(tag))
+            {
+                BigInteger total = 0;
+                foreach (var item in wd.Accounts[tag])
+                    total += GetAddrBalance(item.Address);
+                return total;
+            }
+            return 0;
+        }
+
+        public BigInteger GetAddrBalance(string address)
         {
             UpdateTxs(address);
             if (wd.Txs.ContainsKey(address))

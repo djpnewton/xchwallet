@@ -85,6 +85,13 @@ namespace xchwallet
             return address;
         }
 
+        public IEnumerable<IAddress> GetAddresses(string tag)
+        {
+            if (wd.Addresses.ContainsKey(tag))
+                return wd.Addresses[tag];
+            return new List<IAddress>();
+        }
+
         private BitcoinAddress AddressOf(ExtPubKey pubkey, KeyPath path)
 		{
 			return pubkey.Derive(path).PubKey.Hash.GetAddress(client.Network);
@@ -140,7 +147,24 @@ namespace xchwallet
             }
         }
 
-        public IEnumerable<ITransaction> GetTransactions(string address)
+        void AddTxs(List<ITransaction> txs, string address)
+        {
+            if (wd.Txs.ContainsKey(address))
+                foreach (var tx in wd.Txs[address])
+                    txs.Add(tx);
+        }
+
+        public IEnumerable<ITransaction> GetTransactions(string tag)
+        {
+            UpdateTxs();
+            var txs = new List<ITransaction>(); 
+            if (wd.Addresses.ContainsKey(tag))
+                foreach (var item in wd.Addresses[tag])
+                    AddTxs(txs, item.Address);
+            return txs;
+        }
+
+        public IEnumerable<ITransaction> GetAddrTransactions(string address)
         {
             UpdateTxs();
             if (wd.Txs.ContainsKey(address))
@@ -148,7 +172,22 @@ namespace xchwallet
             return new List<ITransaction>(); 
         }
 
-        public BigInteger GetBalance(string address)
+        public BigInteger GetBalance(string tag)
+        {
+            UpdateTxs();
+            if (wd.Addresses.ContainsKey(tag))
+            {
+                BigInteger total = 0;
+                foreach (var item in wd.Addresses[tag])
+                    if (wd.Txs.ContainsKey(item.Address))
+                        foreach (var tx in wd.Txs[item.Address])
+                            total += tx.Amount;
+                return total;
+            }
+            return 0;
+        }
+
+        public BigInteger GetAddrBalance(string address)
         {
             UpdateTxs();
             if (wd.Txs.ContainsKey(address))

@@ -24,8 +24,11 @@ namespace xchwallet
     {
         bool IsMainnet();
         IAddress NewAddress(string tag);
-        IEnumerable<ITransaction> GetTransactions(string address);
-        BigInteger GetBalance(string address);
+        IEnumerable<IAddress> GetAddresses(string tag);
+        IEnumerable<ITransaction> GetTransactions(string tag);
+        IEnumerable<ITransaction> GetAddrTransactions(string address);
+        BigInteger GetBalance(string tag);
+        BigInteger GetAddrBalance(string address);
     }
 
     public class BaseAddress : IAddress
