@@ -103,19 +103,15 @@ namespace xchwallet
 
         public bool ContainsAddress(string address)
         {
-            // if no accout there return false
-             if (wd.Accounts.Count>0)
-             {  
-                foreach(var item in wd.Accounts)
+            foreach (var item in wd.Accounts)
+            {
+                foreach (var acct in item.Value)
+                if (acct.Address==address)
                 {
-                    foreach (var acct in item.Value)
-                       if(acct.Address==address)
-                       {
-                            return true;
-                       }
+                        return true;
                 }
-             } 
-             return false;
+            }
+            return false;
         }
 
         public IAddress NewAddress(string tag)
