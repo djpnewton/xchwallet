@@ -68,7 +68,6 @@ namespace xchwallet
 
         public bool ContainsAddress(string address)
         {
-           
             foreach (var item in wd.Accounts)
             {
                 foreach (var acct in item.Value)
