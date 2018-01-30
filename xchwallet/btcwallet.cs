@@ -251,19 +251,15 @@ namespace xchwallet
             // add inputs until we can satisfy our output
             BigInteger totalInput = 0;
             var toBeSpent = new List<Coin>();
+            var toBeSpentKeys = new List<Key>(); 
             foreach (var candidate in candidates)
             {
+                // add to list of coins and private keys to spend
                 tx.AddInput(new TxIn(candidate.Item1.Outpoint));
                 toBeSpent.Add(candidate.Item1);
                 totalInput += candidate.Item1.Amount.Satoshi;
-                // sign input
                 var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
-                var pkaddr = privateKey.ScriptPubKey.GetDestinationAddress(client.Network);
-
-                //TODO: debug
-                Console.WriteLine("Signing input with key for {0}", pkaddr);
-
-                tx.Sign(privateKey, candidate.Item1);
+                toBeSpentKeys.Add(privateKey);
                 // check if we have enough inputs
                 if (totalInput >= amount)
                     break;
@@ -277,11 +273,9 @@ namespace xchwallet
                 var changeAddress = AddChangeAddress(tagChange);
                 tx.AddOutput(fee - targetFee, changeAddress);
             }
-
-            //TODO: debug
-            Console.WriteLine(tx);
-            Console.WriteLine(tx.ToHex());
-
+            // sign inputs (after adding a change output)
+            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
                 return new List<string>() {tx.GetHash().ToString()};
