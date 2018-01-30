@@ -1,9 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.IO;
+using Newtonsoft.Json;
 
 namespace xchwallet
 {
+    public static class Util
+    {
+        struct WalletType
+        {
+            public string Type;
+        }
+        public static string GetWalletType(string filename)
+        {
+            if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
+            {
+                var wt = JsonConvert.DeserializeObject<WalletType>(File.ReadAllText(filename));
+                return wt.Type;
+            }
+            return null;
+        }
+    }
+
     public interface IAddress
     {
         string Tag { get; }
@@ -23,12 +42,19 @@ namespace xchwallet
     public interface IWallet
     {
         bool IsMainnet();
+        IEnumerable<string> GetTags();
         IAddress NewAddress(string tag);
         IEnumerable<IAddress> GetAddresses(string tag);
         IEnumerable<ITransaction> GetTransactions(string tag);
         IEnumerable<ITransaction> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
+        IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount);
+        //IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo);
+        //IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
+        //void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+
+        void Save(string filename);
     }
 
     public class BaseAddress : IAddress

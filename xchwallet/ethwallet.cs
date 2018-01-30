@@ -31,14 +31,17 @@ namespace xchwallet
 
     public class EthWallet : IWallet
     {
+        public const string TYPE = "ETH";
         struct WalletData
         {
+            public string Type;
             public Accts Accounts;
             public AcctTxs Txs;
             public int LastPathIndex;
         }
 
         const string PATH = "m/44'/60'/0'/x";
+        const int TX_GAS = 21000;
 
         Web3 web3 = null;
         string gethTxScanAddress = null;
@@ -92,6 +95,7 @@ namespace xchwallet
 
         public void Save(string filename)
         {
+            wd.Type = TYPE;
             // save data
             if (!string.IsNullOrWhiteSpace(filename))  
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
@@ -100,6 +104,11 @@ namespace xchwallet
         public bool IsMainnet()
         {
             return mainNet;
+        }
+
+        public IEnumerable<string> GetTags()
+        {
+            return wd.Accounts.Keys;
         }
 
         public IAddress NewAddress(string tag)
@@ -138,6 +147,14 @@ namespace xchwallet
             public string to;
             public string value;
             public long block_num;
+            public scantx(string txid, string from_, string to, string value, long blockNum)
+            {
+                this.txid = txid;
+                this.from_ = from_;
+                this.to = to;
+                this.value = value;
+                this.block_num = blockNum;
+            }
         }
 
         void UpdateTxs(string address)
@@ -224,6 +241,63 @@ namespace xchwallet
                 return total;
             }
             return 0;
+        }
+
+        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, out List<string> signedSpendTxs)
+        {
+            signedSpendTxs = new List<string>();
+            var amountRemaining = amount;
+            var fee = gasPrice * gasLimit;
+            foreach (var acct in candidates)
+            {
+                if (amountRemaining == 0)
+                    break;
+                // get transaction count and balance for the account
+                var txCountTask = web3.Eth.Transactions.GetTransactionCount.SendRequestAsync(acct.Address);
+                txCountTask.Wait();
+                var txCount = txCountTask.Result.Value;
+                var balance = GetAddrBalance(acct.Address);
+                // if the balance is greater then the fee we can use this account
+                if (balance > fee)
+                {
+                    // calcuate the actual amount we will use from this account
+                    var amountThisAddress = balance - fee;
+                    if (amountThisAddress > amountRemaining)
+                        amountThisAddress = amountRemaining;
+                    // create signed transaction
+                    var account = wallet.GetAccount(acct.Address);
+                    var signedTx = Web3.OfflineTransactionSigner.SignTransaction(account.PrivateKey, to, amountThisAddress, txCount, gasPrice, gasLimit);
+                    // update spend tx list and amount remaining
+                    amountRemaining -= amountThisAddress;
+                    signedSpendTxs.Add(signedTx);
+                }
+            }
+            return amountRemaining == 0;
+        }
+
+        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
+        {
+            List<string> txids = new List<string>();
+            // get gas price
+            var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
+            gasPriceTask.Wait();
+            var gasPrice = gasPriceTask.Result.Value;
+            // create spend transaction from accounts
+            var accts = GetAddresses(tag);
+            List<string> signedSpendTxs;
+                    //TODO: check gas price, and/or allow custom setting (max total wei too?)
+            if (CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, out signedSpendTxs))
+            {
+                // send each raw signed transaction and get the txid
+                foreach (var rawTx in signedSpendTxs)
+                {
+                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(rawTx);
+                    sendTxTask.Wait();
+                    var txid = sendTxTask.Result;
+                    txids.Add(txid);
+                }
+            }
+            return txids;
         }
     }
 }

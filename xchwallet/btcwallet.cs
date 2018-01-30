@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Linq;
 using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
@@ -26,16 +27,19 @@ namespace xchwallet
 
     public class BtcWallet : IWallet
     {
+        public const string TYPE = "BTC";
         struct WalletData
         {
+            public string Type;
             public Addrs Addresses;
             public AddrTxs Txs;
         }
 
+        readonly BitcoinExtKey key = null;
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
-        NBXplorer.Models.UTXOChanges utxo = null;
+        NBXplorer.Models.UTXOChanges utxoChanges = null;
         WalletData wd = new WalletData{Addresses = new Addrs(), Txs = new AddrTxs()};
 
         public BtcWallet(string seedHex, string filename, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false)
@@ -43,8 +47,8 @@ namespace xchwallet
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
                 wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
-            // create extended public key
-            var key = new BitcoinExtKey(new ExtKey(seedHex), network);
+            // create extended key
+            key = new BitcoinExtKey(new ExtKey(seedHex), network);
             var strpubkey = $"{key.Neuter().ToString()}";
             if (useLegacyAddrs)
                 strpubkey = strpubkey + "-[legacy]";
@@ -57,6 +61,7 @@ namespace xchwallet
 
         public void Save(string filename)
         {
+            wd.Type = TYPE;
             // save data
             if (!string.IsNullOrWhiteSpace(filename))  
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
@@ -67,12 +72,13 @@ namespace xchwallet
             return client.Network == Network.Main;
         }
 
-        public IAddress NewAddress(string tag)
+        public IEnumerable<string> GetTags()
         {
-            // create new address that is unused
-            var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
-            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network);
-            var address = new BtcAddress(tag, keypathInfo.KeyPath.ToString(), addr.ToString());
+            return wd.Addresses.Keys;
+        }
+
+        void AddAddress(string tag, BtcAddress address)
+        {
             // add to address list
             if (wd.Addresses.ContainsKey(tag))
                 wd.Addresses[tag].Add(address);
@@ -82,6 +88,16 @@ namespace xchwallet
                 list.Add(address);
                 wd.Addresses[tag] = list;
             }
+        }
+
+        public IAddress NewAddress(string tag)
+        {
+            // create new address that is unused
+            var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
+            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network);
+            var address = new BtcAddress(tag, keypathInfo.KeyPath.ToString(), addr.ToString());
+            // add to address list
+            AddAddress(tag, address);
             return address;
         }
 
@@ -125,12 +141,12 @@ namespace xchwallet
 
         private void UpdateTxs(bool noWait = false)
         {
-            utxo = client.Sync(pubkey, utxo, noWait);
-            if (utxo.HasChanges)
+            utxoChanges = client.Sync(pubkey, utxoChanges, noWait);
+            if (utxoChanges.HasChanges)
             {
-                foreach (var item in utxo.Unconfirmed.UTXOs)
+                foreach (var item in utxoChanges.Unconfirmed.UTXOs)
                     processUtxo(item);
-                foreach (var item in utxo.Confirmed.UTXOs)
+                foreach (var item in utxoChanges.Confirmed.UTXOs)
                     processUtxo(item);
             }
         }
@@ -198,6 +214,80 @@ namespace xchwallet
                 return total;
             }
             return 0;
+        }
+
+        public BitcoinAddress AddChangeAddress(string tag)
+        {
+            // create new address that is unused
+            var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Change, reserve: false);
+            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network);
+            var address = new BtcAddress(tag, keypathInfo.KeyPath.ToString(), addr.ToString());
+            // add to address list
+            AddAddress(tag, address);
+            return addr;
+        }
+
+        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
+        {
+            // create tx template with destination as first output
+            var tx = new Transaction();
+            var money = new Money((ulong)amount);
+            var toaddr = BitcoinAddress.Create(to, client.Network);
+            var output = tx.AddOutput(money, toaddr);
+            // create list of candidate coins to spend based on UTXOs from the selected tag
+            var addrs = GetAddresses(tag);
+            var candidates = new List<Tuple<Coin, string>>();
+            var utxos = client.Sync(pubkey, null);
+            foreach (var utxo in utxos.Confirmed.UTXOs)
+            {
+                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network).ToString();
+                foreach (var addr in addrs)
+                    if (addrStr == addr.Address)
+                    {
+                        candidates.Add(new Tuple<Coin, string>(utxo.AsCoin(), addr.Path));
+                        break;
+                    }
+            }
+            // add inputs until we can satisfy our output
+            BigInteger totalInput = 0;
+            var toBeSpent = new List<Coin>();
+            foreach (var candidate in candidates)
+            {
+                tx.AddInput(new TxIn(candidate.Item1.Outpoint));
+                toBeSpent.Add(candidate.Item1);
+                totalInput += candidate.Item1.Amount.Satoshi;
+                // sign input
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
+                var pkaddr = privateKey.ScriptPubKey.GetDestinationAddress(client.Network);
+
+                //TODO: debug
+                Console.WriteLine("Signing input with key for {0}", pkaddr);
+
+                tx.Sign(privateKey, candidate.Item1);
+                // check if we have enough inputs
+                if (totalInput >= amount)
+                    break;
+            }
+            // check fee rate
+            var fee = tx.GetFee(toBeSpent.ToArray());
+            var targetFee = new Money(0.0001m, MoneyUnit.BTC); //TODO: fix fixed fee size, allow custom (max total?) and satoshis per byte
+            if (fee > targetFee)
+            {
+                // add a change output
+                var changeAddress = AddChangeAddress(tagChange);
+                tx.AddOutput(fee - targetFee, changeAddress);
+            }
+
+            //TODO: debug
+            Console.WriteLine(tx);
+            Console.WriteLine(tx.ToHex());
+
+            var result = client.Broadcast(tx);
+            if (result.Success)
+                return new List<string>() {tx.GetHash().ToString()};
+            else
+                Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+            return new List<string>(); 
         }
     }
 }
