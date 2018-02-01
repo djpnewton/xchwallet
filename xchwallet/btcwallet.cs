@@ -21,7 +21,8 @@ namespace xchwallet
 
     public class BtcTransaction : BaseTransaction
     {
-        public BtcTransaction(string id, string from, string to, BigInteger amount, long confirmations) : base(id, from, to, amount, confirmations)
+        public BtcTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
+            base(id, from, to, direction, amount, fee, confirmations)
         {}
     }
 
@@ -118,7 +119,7 @@ namespace xchwallet
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network);
             var id = utxo.Outpoint.Hash;
-            var tx = new BtcTransaction(id.ToString(), "", to.ToString(), utxo.Value.Satoshi, utxo.Confirmations);
+            var tx = new BtcTransaction(id.ToString(), "", to.ToString(), WalletDirection.Incomming, utxo.Value.Satoshi, -1, utxo.Confirmations);
             List<BtcTransaction> txs = null;
             if (wd.Txs.ContainsKey(tx.To))
                 txs = wd.Txs[tx.To];

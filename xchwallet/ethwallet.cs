@@ -4,8 +4,11 @@ using System.Globalization;
 using System.Collections.Generic;
 using System.Net;
 using System.Numerics;
+using System.Text;
 using Nethereum.Web3;
 using Nethereum.HdWallet;
+using Nethereum.Signer;
+using Nethereum.Hex.HexConvertors.Extensions;
 using Newtonsoft.Json;
 
 namespace xchwallet
@@ -25,7 +28,8 @@ namespace xchwallet
 
     public class EthTransaction : BaseTransaction
     {
-        public EthTransaction(string id, string from, string to, BigInteger amount, long confirmations) : base(id, from, to, amount, confirmations)
+        public EthTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
+            base(id, from, to, direction, amount, fee, confirmations)
         {}
     }
 
@@ -169,7 +173,8 @@ namespace xchwallet
                 long confirmations = 0;
                 if (scantx.block_num > 0)
                     confirmations = blockNum - scantx.block_num;
-                var tx = new EthTransaction(scantx.txid, scantx.from_, address, BigInteger.Parse(scantx.value), confirmations);
+                var tx = new EthTransaction(scantx.txid, scantx.from_, address, WalletDirection.Incomming,
+                    BigInteger.Parse(scantx.value), -1, confirmations);
                 List<EthTransaction> txs = null;
                 if (wd.Txs.ContainsKey(tx.To))
                     txs = wd.Txs[tx.To];
@@ -237,15 +242,21 @@ namespace xchwallet
             {
                 BigInteger total = 0;
                 foreach (var tx in wd.Txs[address])
-                    total += tx.Amount;
+                    if (tx.Direction == WalletDirection.Incomming)
+                        total += tx.Amount;
+                    else if (tx.Direction == WalletDirection.Outgoing)
+                    {
+                        total -= tx.Amount;
+                        total -= tx.Fee;
+                    }
                 return total;
             }
             return 0;
         }
 
-        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, out List<string> signedSpendTxs)
+        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, out List<Tuple<string, string>> signedSpendTxs)
         {
-            signedSpendTxs = new List<string>();
+            signedSpendTxs = new List<Tuple<string, string>>();
             var amountRemaining = amount;
             var fee = gasPrice * gasLimit;
             foreach (var acct in candidates)
@@ -269,10 +280,22 @@ namespace xchwallet
                     var signedTx = Web3.OfflineTransactionSigner.SignTransaction(account.PrivateKey, to, amountThisAddress, txCount, gasPrice, gasLimit);
                     // update spend tx list and amount remaining
                     amountRemaining -= amountThisAddress;
-                    signedSpendTxs.Add(signedTx);
+                    signedSpendTxs.Add(new Tuple<string, string>(acct.Address, signedTx));
                 }
             }
             return amountRemaining == 0;
+        }
+
+        void AddOutgoingTx(string from, string signedTx)
+        {
+            var tx = new Transaction(signedTx.HexToByteArray());
+            if (!wd.Txs.ContainsKey(from))
+                wd.Txs[from] = new List<EthTransaction>();
+            var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
+            var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
+            Console.WriteLine("{0}, {1}", amount, fee);
+            wd.Txs[from].Add(new EthTransaction(tx.Hash.ToHex(true), from, tx.ReceiveAddress.ToHex(true), WalletDirection.Outgoing,
+                amount, fee, 0));
         }
 
         public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
@@ -284,17 +307,19 @@ namespace xchwallet
             var gasPrice = gasPriceTask.Result.Value;
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
-            List<string> signedSpendTxs;
+            List<Tuple<string, string>> signedSpendTxs;
                     //TODO: check gas price, and/or allow custom setting (max total wei too?)
             if (CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, out signedSpendTxs))
             {
                 // send each raw signed transaction and get the txid
-                foreach (var rawTx in signedSpendTxs)
+                foreach (var tx in signedSpendTxs)
                 {
-                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(rawTx);
+                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
                     sendTxTask.Wait();
                     var txid = sendTxTask.Result;
                     txids.Add(txid);
+                    // add to wallet data
+                    AddOutgoingTx(tx.Item1, tx.Item2);
                 }
             }
             return txids;
