@@ -28,7 +28,7 @@ namespace test
             public string Tag { get; set; }
         }
 
-        [Verb("spend", HelpText = "Spend BTC - send funds from the wallet")]
+        [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
         class SpendOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]

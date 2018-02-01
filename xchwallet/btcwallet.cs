@@ -228,6 +228,15 @@ namespace xchwallet
             return addr;
         }
 
+        void AddOutgoingTx(string txid, string from, string to, BigInteger amount, BigInteger fee)
+        {
+            if (!wd.Txs.ContainsKey(from))
+                wd.Txs[from] = new List<BtcTransaction>();
+            Console.WriteLine("{0}, {1}", amount, fee);
+            wd.Txs[from].Add(new BtcTransaction(txid, from, to, WalletDirection.Outgoing,
+                amount, fee, 0));
+        }
+
         public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
         {
             // create tx template with destination as first output
@@ -265,6 +274,9 @@ namespace xchwallet
                 if (totalInput >= amount)
                     break;
             }
+            // check we have enough outputs
+            if (totalInput < amount)
+                return new List<string>(); //TODO: error codes?
             // check fee rate
             var fee = tx.GetFee(toBeSpent.ToArray());
             var targetFee = new Money(0.0001m, MoneyUnit.BTC); //TODO: fix fixed fee size, allow custom (max total?) and satoshis per byte
@@ -279,7 +291,11 @@ namespace xchwallet
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
+            {
+                // log outgoing transaction
+                AddOutgoingTx(tx.GetHash().ToString(), tag, to, amount, targetFee.Satoshi);
                 return new List<string>() {tx.GetHash().ToString()};
+            }
             else
                 Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
             return new List<string>(); 

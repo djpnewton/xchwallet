@@ -293,7 +293,6 @@ namespace xchwallet
                 wd.Txs[from] = new List<EthTransaction>();
             var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
-            Console.WriteLine("{0}, {1}", amount, fee);
             wd.Txs[from].Add(new EthTransaction(tx.Hash.ToHex(true), from, tx.ReceiveAddress.ToHex(true), WalletDirection.Outgoing,
                 amount, fee, 0));
         }
