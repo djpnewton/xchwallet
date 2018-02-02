@@ -254,11 +254,13 @@ namespace xchwallet
             return 0;
         }
 
-        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, out List<Tuple<string, string>> signedSpendTxs)
+        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
+            out List<Tuple<string, string>> signedSpendTxs)
         {
             signedSpendTxs = new List<Tuple<string, string>>();
             var amountRemaining = amount;
             var fee = gasPrice * gasLimit;
+            var feeTotal = new BigInteger(0);
             foreach (var acct in candidates)
             {
                 if (amountRemaining == 0)
@@ -282,8 +284,11 @@ namespace xchwallet
                     amountRemaining -= amountThisAddress;
                     signedSpendTxs.Add(new Tuple<string, string>(acct.Address, signedTx));
                 }
+                feeTotal += fee;
             }
-            return amountRemaining == 0;
+            if (feeTotal > feeMax)
+                return false; //TODO: error code??
+            return amountRemaining == 0; //TODO: error code??
         }
 
         void AddOutgoingTx(string from, string signedTx)
@@ -297,18 +302,19 @@ namespace xchwallet
                 amount, fee, 0));
         }
 
-        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
+        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
             List<string> txids = new List<string>();
             // get gas price
-            var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
-            gasPriceTask.Wait();
-            var gasPrice = gasPriceTask.Result.Value;
+            //var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
+            //gasPriceTask.Wait();
+            //var gasPrice = gasPriceTask.Result.Value;
+            var gasPrice = feeUnitPerGasOrByte;
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
             List<Tuple<string, string>> signedSpendTxs;
                     //TODO: check gas price, and/or allow custom setting (max total wei too?)
-            if (CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, out signedSpendTxs))
+            if (CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, feeMax, out signedSpendTxs))
             {
                 // send each raw signed transaction and get the txid
                 foreach (var tx in signedSpendTxs)

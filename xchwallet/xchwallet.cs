@@ -30,12 +30,19 @@ namespace xchwallet
         string Address { get; }
     }
 
+    public enum WalletDirection
+    {
+        Incomming, Outgoing
+    }
+
     public interface ITransaction
     {
         string Id { get; }
         string From { get; }
         string To { get; }
+        WalletDirection Direction { get; }
         BigInteger Amount { get; }
+        BigInteger Fee { get; }
         long Confirmations { get; }
     }
 
@@ -49,7 +56,7 @@ namespace xchwallet
         IEnumerable<ITransaction> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
-        IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount);
+        IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
         //IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo);
         //IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         //void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
@@ -81,15 +88,19 @@ namespace xchwallet
         public string Id { get; }
         public string From { get; }
         public string To { get; }
+        public WalletDirection Direction { get; }
         public BigInteger Amount { get; }
+        public BigInteger Fee { get; }
         public long Confirmations { get; }
 
-        public BaseTransaction(string id, string from, string to, BigInteger amount, long confirmations)
+        public BaseTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
         {
             this.Id = id;
             this.From = from;
             this.To = to;
+            this.Direction = direction;
             this.Amount = amount;
+            this.Fee = fee;
             this.Confirmations = confirmations;
         }
 

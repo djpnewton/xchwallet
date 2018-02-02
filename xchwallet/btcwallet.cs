@@ -237,7 +237,14 @@ namespace xchwallet
                 amount, fee, 0));
         }
 
-        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount)
+        FeeRate GetFeeRate(Transaction tx, List<Key> toBeSpentKeys, List<Coin> toBeSpent)
+        {
+            // sign tx before calculating fee so it includes signatures
+            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            return tx.GetFeeRate(toBeSpent.ToArray());
+        }
+
+        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
             // create tx template with destination as first output
             var tx = new Transaction();
@@ -273,27 +280,38 @@ namespace xchwallet
                 // check if we have enough inputs
                 if (totalInput >= amount)
                     break;
+                //TODO: take into account fees......
             }
-            // check we have enough outputs
+            // check we have enough inputs
             if (totalInput < amount)
                 return new List<string>(); //TODO: error codes?
             // check fee rate
-            var fee = tx.GetFee(toBeSpent.ToArray());
-            var targetFee = new Money(0.0001m, MoneyUnit.BTC); //TODO: fix fixed fee size, allow custom (max total?) and satoshis per byte
-            if (fee > targetFee)
+            var feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
+            var currentSatsPerByte = feeRate.FeePerK / 1024;
+            if (currentSatsPerByte > feeUnitPerGasOrByte)
             {
-                // add a change output
+                // create a change address
                 var changeAddress = AddChangeAddress(tagChange);
-                tx.AddOutput(fee - targetFee, changeAddress);
+                // calculate the target fee
+                var currentFee = feeRate.GetFee(tx.GetVirtualSize());
+                var targetFee = tx.GetVirtualSize() * (long)feeUnitPerGasOrByte;
+                var changeOutput = new TxOut(currentFee - targetFee, changeAddress);
+                targetFee += output.GetSerializedSize() * (long)feeUnitPerGasOrByte;
+                // add the change output
+                changeOutput = tx.AddOutput(currentFee - targetFee, changeAddress);
             }
             // sign inputs (after adding a change output)
             tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            // recalculate fee rate and check it is less then the max fee
+            var fee = tx.GetFee(toBeSpent.ToArray());
+            if (fee.Satoshi > feeMax)
+                return new List<string>(); //TODO: error codes?
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), tag, to, amount, targetFee.Satoshi);
+                AddOutgoingTx(tx.GetHash().ToString(), tag, to, amount, fee.Satoshi);
                 return new List<string>() {tx.GetHash().ToString()};
             }
             else

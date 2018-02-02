@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
@@ -113,7 +114,19 @@ namespace test
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
-            var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount);
+            var feeUnitPerGasOrByte = new BigInteger(0);
+            var feeMax = new BigInteger(0);
+            if (wallet is BtcWallet)
+            {
+                feeUnitPerGasOrByte = 20; // sats per byte
+                feeMax = 10000;
+            }
+            if (wallet is EthWallet)
+            {
+                feeUnitPerGasOrByte = 20000000000; // gas price (wei) 
+                feeMax = 21000 * feeUnitPerGasOrByte * 10;
+            }
+            var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnitPerGasOrByte);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
             wallet.Save(opts.Filename);
