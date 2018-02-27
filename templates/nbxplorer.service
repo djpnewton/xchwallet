@@ -6,7 +6,7 @@ After=network.target
 User=xchwallet
 Group=xchwallet
 
-ExecStart=/opt/gethtxscan/app.py
+ExecStart=/bin/bash -c "cd /opt/NBXplorer/NBXplorer; dotnet run"
 
 Restart=always
 PrivateTmp=true

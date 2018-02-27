@@ -5,12 +5,25 @@
   become_user: root
 
   tasks:
+    - name: ansible group
+      group: 
+        name: xchwallet
+        state: present
+
+    - name: ansible user
+      user:
+        name: xchwallet
+        shell: /usr/sbin/nologin
+        groups: geth
+        system: yes
+        state: present
+
     - name: copy gethtxscan
       copy:
         src: gethtxscan/
         dest: /opt/gethtxscan
-        owner: www-data
-        group: www-data
+        owner: xchwallet
+        group: xchwallet
         mode: 0755
 
     - name: copy gethtxscan.service
