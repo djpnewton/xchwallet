@@ -1,0 +1,56 @@
+---
+- name: nbxplorer
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: ansible group
+      group: 
+        name: xchwallet
+        state: present
+
+    - name: ansible user
+      user:
+        name: xchwallet
+        shell: /usr/sbin/nologin
+        groups: geth
+        system: yes
+        state: present
+
+    - name: copy nbxplorer
+      copy:
+        src: NBXplorer/
+        dest: /opt/NBXplorer
+        owner: xchwallet
+        group: xchwallet
+        mode: 0755
+
+    - file:
+        path: /home/xchwallet/.nbxplorer/Main
+        state: directory
+        owner: xchwallet
+        group: xchwallet
+        mode: 0755
+
+    - name: copy nbxplorer settings
+      template:
+        src: templates/nbxplorer_settings.config
+        dest: /home/xchwallet/.nbxplorer/Main/settings.config
+
+    - name: copy nbxplorer.service
+      template:
+        src: templates/nbxplorer.service
+        dest: /etc/systemd/system/nbxplorer.service
+
+    - name: stop nbxplorer service
+      service: 
+        name: nbxplorer
+        state: stopped
+        enabled: no
+
+    - name: start nbxplorer service
+      service: 
+        name: nbxplorer
+        state: started
+        enabled: yes

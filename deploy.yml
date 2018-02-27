@@ -48,3 +48,5 @@
 - include: geth.yml
 - include: bitcoind.yml
 - include: gethtxscan.yml
+- include: dotnetcore.yml
+- include: nbxplorer.yml
