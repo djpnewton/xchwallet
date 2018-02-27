@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 import threading
 import time
 from flask import Flask, request, jsonify
@@ -19,7 +20,7 @@ app = Flask("gethtxscan")
 if not app.debug:
     import logging
     from logging.handlers import RotatingFileHandler
-    file_handler = RotatingFileHandler('gethtxscan.log', maxBytes=1024 * 1024 * 100, backupCount=20)
+    file_handler = RotatingFileHandler(os.path.join(os.path.dirname(os.path.realpath(__file__)), "gethtxscan.log"), maxBytes=1024 * 1024 * 100, backupCount=20)
     file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(formatter)

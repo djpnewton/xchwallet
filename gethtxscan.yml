@@ -1,0 +1,34 @@
+---
+- name: gethtxscan
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: copy gethtxscan
+      copy:
+        src: gethtxscan/
+        dest: /opt/gethtxscan
+        owner: www-data
+        group: www-data
+        mode: 0755
+
+    - name: copy gethtxscan.service
+      template:
+        src: templates/gethtxscan.service
+        dest: /etc/systemd/system/gethtxscan.service
+
+    - name: install python requiremnents
+      shell: pip3 install --system -r /opt/gethtxscan/requirements.txt
+
+    - name: stop gethtxscan service
+      service: 
+        name: gethtxscan
+        state: stopped
+        enabled: no
+
+    - name: start gethtxscan service
+      service: 
+        name: gethtxscan
+        state: started
+        enabled: yes
