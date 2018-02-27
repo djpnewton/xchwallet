@@ -1,0 +1,5 @@
+rpcuser=user
+rpcpassword=pass
+rpcbind=0.0.0.0
+rpcallowip={{ icowallet_ip }}
+testnet={{ (DEPLOY_TYPE == "production") | ternary("0","1") }}

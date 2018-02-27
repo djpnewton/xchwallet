@@ -1,0 +1,67 @@
+---
+- name: geth
+  hosts: all
+  become: yes
+  become_user: root
+
+  vars:
+    gethrelease: geth-linux-amd64-1.8.1-1e67410e
+  tasks:
+    - name: ansible group
+      group: 
+        name: geth
+        state: present
+
+    - name: ansible user
+      user:
+        name: geth
+        shell: /usr/sbin/nologin
+        groups: geth
+        system: yes
+        state: present
+
+    - name: download and install geth
+      unarchive:
+        src: https://gethstore.blob.core.windows.net/builds/{{ gethrelease }}.tar.gz
+        dest: /home/geth/
+        remote_src: yes
+        creates: /home/geth/{{ gethrelease }}
+
+    - name: copy geth binary
+      copy:
+        src: /home/geth/{{ gethrelease }}/geth 
+        dest: /usr/local/bin/geth
+        remote_src: yes
+        owner: geth
+        group: geth
+        mode: 0755
+
+    - name: copy geth.service
+      template:
+        src: templates/geth.service
+        dest: /etc/systemd/system/geth.service
+
+    - name: copy geth_defaults
+      template:
+        src: templates/geth_defaults.j2
+        dest: /etc/default/geth
+
+    - name: stop geth service
+      service: 
+        name: geth 
+        state: stopped
+        enabled: no
+
+    - name: set .ethereum ownership
+      file: 
+        path: /home/geth/.ethereum
+        owner: geth
+        group: geth
+        state: directory
+        recurse: yes
+
+    - name: start geth service
+      service: 
+        name: geth 
+        state: started
+        enabled: yes

@@ -1,0 +1,76 @@
+---
+- name: bitcoind
+  hosts: all
+  become: yes
+  become_user: root
+
+  vars:
+    bitcoinfile: bitcoin-0.16.0-x86_64-linux-gnu.tar.gz
+  tasks:
+    - name: bitcoind group
+      group: 
+        name: bitcoin
+        state: present
+
+    - name: bitcoind user
+      user:
+        name: bitcoin
+        shell: /usr/sbin/nologin
+        groups: bitcoin
+        system: yes
+        state: present
+
+    - name: download and unpack bitcoind
+      unarchive:
+        src: https://bitcoin.org/bin/bitcoin-core-0.16.0/{{ bitcoinfile }}
+        dest: /home/bitcoin/
+        remote_src: yes
+        creates: /home/bitcoin/bitcoin-0.16.0
+
+    - name: copy bitcoin-cli binary
+      copy:
+        src: /home/bitcoin/bitcoin-0.16.0/bin/bitcoin-cli
+        dest: /usr/local/bin/bitcoin-cli
+        remote_src: yes
+        owner: bitcoin
+        group: bitcoin
+        mode: 0755
+
+    - name: copy bitcoind binary
+      copy:
+        src: /home/bitcoin/bitcoin-0.16.0/bin/bitcoind
+        dest: /usr/local/bin/bitcoind
+        remote_src: yes
+        owner: bitcoin
+        group: bitcoin
+        mode: 0755
+
+    - name: copy bitcoind.service
+      template:
+        src: templates/bitcoind.service
+        dest: /etc/systemd/system/bitcoind.service
+
+    - name: copy bitcoind_defaults
+      template:
+        src: templates/bitcoind_defaults.j2
+        dest: /etc/default/bitcoind
+
+    - name: stop bitcoind service
+      service: 
+        name: bitcoind 
+        state: stopped
+        enabled: no
+
+    - name: set /home/bitcoin/.bitcoin ownership
+      file:
+        path: /home/bitcoin/.bitcoin
+        owner: bitcoin
+        group: bitcoin
+        state: directory
+        recurse: yes
+
+    - name: start bitcoind service
+      service: 
+        name: bitcoind 
+        state: started
+        enabled: yes

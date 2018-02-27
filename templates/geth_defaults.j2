@@ -1,0 +1,5 @@
+GETH_ENABLE_RPC="--rpc --rpcapi eth,web3,net,txpool"
+GETH_CACHE="--cache 1024"
+GETH_MAXPEERS="--maxpeers 512"
+PIDFILE=/home/geth/geth.pid
+GETH_EXTRAARGS="--fast --rpcaddr 0.0.0.0 {{ (DEPLOY_TYPE == "production") | ternary("","--testnet") }}"
