@@ -1,0 +1,22 @@
+[Unit]
+Description=Bitcoin daemon
+After=network.target
+
+[Service]
+User=bitcoin
+Group=bitcoin
+
+Type=forking
+PIDFile=/home/bitcoin/bitcoind.pid
+EnvironmentFile=-/etc/default/bitcoind
+ExecStart=/bin/bash -c "/usr/local/bin/bitcoind -server -daemon -pid=${BITCOIND_PID_FILE} -conf=${BITCOIND_CONF} -datadir=${BITCOIND_DATA_DIR} $BITCOIND_EXTRAARGS"
+
+Restart=always
+PrivateTmp=true
+TimeoutStopSec=60s
+TimeoutStartSec=2s
+StartLimitInterval=120s
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+[Unit]
+Description=Geth Ethereum node
+After=network.target
+
+[Service]
+User=geth
+Group=geth
+
+Type=simple
+# PIDFile=/home/geth/geth.pid
+EnvironmentFile=-/etc/default/geth
+ExecStart=/usr/local/bin/geth $GETH_ENABLE_RPC $GETH_CACHE $GETH_MAXPEERS $GETH_EXTRAARGS
+
+Restart=always
+PrivateTmp=true
+TimeoutStopSec=60s
+TimeoutStartSec=10s
+StartLimitInterval=120s
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
