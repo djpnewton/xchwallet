@@ -13,8 +13,13 @@ Vagrant.configure(2) do |config|
     override.vm.box = "stephenpearson/ubuntu-16.04"
   end
 
-  config.vm.network "forwarded_port", guest: 23000, host: 23000
-  config.vm.network "forwarded_port", guest: 5001, host: 5001
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+
+  config.vm.network "forwarded_port", guest: 24444, host: 24444
+  config.vm.network "forwarded_port", guest: 5001,  host: 5001
 
   config.vm.provision "ansible" do |ansible|
     ansible.extra_vars = {
