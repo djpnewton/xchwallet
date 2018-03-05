@@ -20,7 +20,7 @@
 
     - name: copy gethtxscan
       copy:
-        src: gethtxscan/
+        src: ../gethtxscan/
         dest: /opt/gethtxscan
         owner: xchwallet
         group: xchwallet

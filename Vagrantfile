@@ -26,7 +26,7 @@ Vagrant.configure(2) do |config|
       DEPLOY_TYPE: "test",
       vagrant: true
     }
-    ansible.playbook = "deploy.yml"
+    ansible.playbook = "ansible/deploy.yml"
     ansible.verbose = "vvvv"
   end
 end

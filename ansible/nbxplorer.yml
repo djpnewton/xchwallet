@@ -20,7 +20,7 @@
 
     - name: copy nbxplorer
       copy:
-        src: NBXplorer/
+        src: ../NBXplorer/
         dest: /opt/NBXplorer
         owner: xchwallet
         group: xchwallet
