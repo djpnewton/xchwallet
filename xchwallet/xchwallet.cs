@@ -11,6 +11,10 @@ namespace xchwallet
         struct WalletType
         {
             public string Type;
+            public WalletType(string type)
+            {
+                this.Type = type;
+            }
         }
         public static string GetWalletType(string filename)
         {
