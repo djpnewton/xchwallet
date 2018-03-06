@@ -325,5 +325,26 @@ namespace xchwallet
                 Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
             return new List<string>(); 
         }
+
+        public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
+        {
+            var txs = new List<BtcTransaction>();
+            if (wd.Addresses.ContainsKey(tag))
+                foreach (var addr in wd.Addresses[tag])
+                    if (wd.Txs.ContainsKey(addr.Address))
+                        foreach (var tx in wd.Txs[addr.Address])
+                            if (!tx.Acknowledged)
+                                txs.Add(tx);
+            return txs;
+        }
+
+        public void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
+        {
+            foreach (var tx in txs)
+            {
+                System.Diagnostics.Debug.Assert(tx is BaseTransaction);
+                ((BaseTransaction)tx).Acknowledged = true;
+            }
+        }
     }
 }

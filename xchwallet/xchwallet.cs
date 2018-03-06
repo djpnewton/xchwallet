@@ -62,8 +62,8 @@ namespace xchwallet
         BigInteger GetAddrBalance(string address);
         IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
         //IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo);
-        //IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
-        //void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+        IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
+        void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
 
         void Save(string filename);
     }
@@ -96,6 +96,7 @@ namespace xchwallet
         public BigInteger Amount { get; }
         public BigInteger Fee { get; }
         public long Confirmations { get; }
+        public bool Acknowledged { get; set; }
 
         public BaseTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
         {
@@ -106,6 +107,7 @@ namespace xchwallet
             this.Amount = amount;
             this.Fee = fee;
             this.Confirmations = confirmations;
+            this.Acknowledged = false;
         }
 
         public override string ToString()

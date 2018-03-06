@@ -45,6 +45,26 @@ namespace test
             public ulong Amount { get; set; }
         }
 
+        [Verb("showunack", HelpText = "Show unacknowledged transactions")]
+        class ShowUnAckOptions
+        { 
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+
+            [Option('t', "tag", Required = true, HelpText = "Wallet tag")]
+            public string Tag { get; set; }
+        }
+
+        [Verb("ack", HelpText = "Acknowledge transactions")]
+        class AckOptions
+        { 
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+
+            [Option('t', "tag", Required = true, HelpText = "Wallet tag")]
+            public string Tag { get; set; }
+        }
+
         static void PrintWallet(IWallet wallet)
         {
             var tags = wallet.GetTags();
@@ -133,13 +153,46 @@ namespace test
             return 0;
         }
 
+        static int RunShowUnAckAndReturnExitCode(ShowUnAckOptions opts)
+        {
+            var walletType = Util.GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            foreach (var tx in wallet.GetUnacknowledgedTransactions(opts.Tag))
+                Console.WriteLine(tx);
+            return 0;
+        }
+
+        static int RunAckAndReturnExitCode(AckOptions opts)
+        {
+            var walletType = Util.GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
+            foreach (var tx in txs)
+                Console.WriteLine(tx);
+            wallet.AcknowledgeTransactions(opts.Tag, txs);
+            wallet.Save(opts.Filename);
+            return 0;
+        }
+
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<ShowOptions, NewAddrOptions, SpendOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<ShowOptions, NewAddrOptions, SpendOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),
+                (ShowUnAckOptions opts) => RunShowUnAckAndReturnExitCode(opts),
+                (AckOptions opts) => RunAckAndReturnExitCode(opts),
                 errs => 1);
         }
     }
