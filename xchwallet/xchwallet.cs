@@ -61,7 +61,7 @@ namespace xchwallet
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
         IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
-        //IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo);
+        IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
 

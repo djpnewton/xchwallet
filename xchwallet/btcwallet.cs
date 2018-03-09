@@ -159,18 +159,6 @@ namespace xchwallet
             }
         }
 
-        public void XXXPrintUtxos()
-        {
-            var utxo = client.GetUTXOs(pubkey, null, null);
-            Console.WriteLine($"Has changes: {utxo.HasChanges},  Current height: {utxo.CurrentHeight}, Confirmed: {utxo.Confirmed}, unconfirmed utxo count: {utxo.Unconfirmed.UTXOs.Count}, confirmed utxo count: {utxo.Confirmed.UTXOs.Count}");
-            foreach (var item in utxo.Confirmed.UTXOs)
-            {
-                var coin = item.AsCoin();
-                Console.WriteLine($"  -C:\n      {AddressOf(pubkey.Root, item.KeyPath)}");
-                Console.WriteLine($"      {coin.Amount} '{coin.ScriptPubKey}' {coin.Outpoint} {item.KeyPath}");
-            }
-        }
-
         void AddTxs(List<ITransaction> txs, string address)
         {
             if (wd.Txs.ContainsKey(address))
@@ -324,6 +312,13 @@ namespace xchwallet
             else
                 Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
             return new List<string>(); 
+        }
+
+        public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        {
+            throw new Exception("not yet implemented");
+
+            //var to = NewAddress(tagTo);
         }
 
         public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)

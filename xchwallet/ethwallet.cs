@@ -330,6 +330,37 @@ namespace xchwallet
             return txids;
         }
 
+        public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        {
+            BigInteger gasPrice = feeUnitPerGasOrByte;
+
+            List<string> txids = new List<string>();
+            var to = NewAddress(tagTo);
+            BigInteger balance = 0;
+            var accts = new List<IAddress>();
+            foreach (var tag in tagFrom)
+            {
+                balance += GetBalance(tag);
+                var tagAccts = GetAddresses(tag);
+                accts.AddRange(tagAccts);
+            }
+            List<Tuple<string, string>> signedSpendTxs;
+            if (CreateSpendTxs(accts, to.Address, balance, gasPrice, TX_GAS, feeMax, out signedSpendTxs))
+            {
+                // send each raw signed transaction and get the txid
+                foreach (var tx in signedSpendTxs)
+                {
+                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
+                    sendTxTask.Wait();
+                    var txid = sendTxTask.Result;
+                    txids.Add(txid);
+                    // add to wallet data
+                    AddOutgoingTx(tx.Item1, tx.Item2);
+                }
+            }
+            return txids;
+        }
+
         public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
         {
             var txs = new List<EthTransaction>();
