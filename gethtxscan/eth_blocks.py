@@ -4,7 +4,7 @@ import web3
 from config import Cfg
 
 cfg = Cfg()
-web3 = web3.Web3(web3.providers.rpc.HTTPProvider(cfg.geth_uri))
+web3 = web3.Web3(web3.providers.rpc.HTTPProvider(cfg.geth_uri, request_kwargs={'timeout': 60}))
 if cfg.testnet:
     assert(int(web3.version.network) == 3) #ropsten
 else:
