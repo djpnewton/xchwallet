@@ -316,9 +316,77 @@ namespace xchwallet
 
         public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
-            throw new Exception("not yet implemented");
+            // generate new address to send to
+            var to = NewAddress(tagTo);
+            // calc amount in tagFrom
+            BigInteger amount = 0;
+            foreach (var tag in tagFrom)
+                amount += this.GetBalance(tag);
+            // create tx template with destination as first output
+            var tx = new Transaction();
+            var money = new Money((ulong)amount);
+            var toaddr = BitcoinAddress.Create(to.Address, client.Network.NBitcoinNetwork);
+            var output = tx.AddOutput(money, toaddr);
+            // create list of candidate coins to spend based on UTXOs from the selected tags
+            var candidates = new List<Tuple<Coin, string>>();
+            var utxos = client.GetUTXOs(pubkey, null);
+            foreach (var tag in tagFrom)
+            {
+                var addrs = GetAddresses(tag);
+                foreach (var utxo in utxos.Confirmed.UTXOs)
+                {
+                    var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                    foreach (var addr in addrs)
+                        if (addrStr == addr.Address)
+                        {
+                            candidates.Add(new Tuple<Coin, string>(utxo.AsCoin(), addr.Path));
+                            break;
+                        }
+                }
+            }
+            // add all inputs so we can satisfy our output
+            BigInteger totalInput = 0;
+            var toBeSpent = new List<Coin>();
+            var toBeSpentKeys = new List<Key>(); 
+            foreach (var candidate in candidates)
+            {
+                // add to list of coins and private keys to spend
+                tx.AddInput(new TxIn(candidate.Item1.Outpoint));
+                toBeSpent.Add(candidate.Item1);
+                totalInput += candidate.Item1.Amount.Satoshi;
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
+                toBeSpentKeys.Add(privateKey);
+            }
+            // check we have enough inputs
+            if (totalInput < amount)
+                return new List<string>(); //TODO: error codes?
+            // adjust fee rate by reducing the output incrementally
+            var feeRate = new FeeRate(new Money(0));
+            Money currentSatsPerByte = 0;
+            while (currentSatsPerByte < feeUnitPerGasOrByte)
+            {
+                tx.Outputs[0].Value -= 1;
 
-            //var to = NewAddress(tagTo);
+                feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
+                currentSatsPerByte = feeRate.FeePerK / 1024;
+            }
+            // sign inputs
+            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            // recalculate fee rate and check it is less then the max fee
+            var fee = tx.GetFee(toBeSpent.ToArray());
+            if (fee.Satoshi > feeMax)
+                return new List<string>(); //TODO: error codes?
+            // broadcast transaction
+            var result = client.Broadcast(tx);
+            if (result.Success)
+            {
+                // log outgoing transaction
+                AddOutgoingTx(tx.GetHash().ToString(), tagTo, to.Address, amount, fee.Satoshi);
+                return new List<string>() {tx.GetHash().ToString()};
+            }
+            else
+                Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+            return new List<string>(); 
         }
 
         public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
