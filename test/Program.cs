@@ -58,6 +58,19 @@ namespace test
             public ulong Amount { get; set; }
         }
 
+        [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
+        class ConsolidateOptions
+        { 
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+
+            [Option('t', "tags", Required = true, HelpText = "Wallet tag(s) to spend from")]
+            public string Tags { get; set; }
+
+            [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
+            public string TagTo { get; set; }
+        }
+
         [Verb("showunack", HelpText = "Show unacknowledged transactions")]
         class ShowUnAckOptions
         { 
@@ -180,6 +193,37 @@ namespace test
             return 0;
         }
 
+        static int RunConsolidateAndReturnExitCode(ConsolidateOptions opts)
+        {
+            var walletType = Util.GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var feeUnitPerGasOrByte = new BigInteger(0);
+            var feeMax = new BigInteger(0);
+            if (wallet is BtcWallet)
+            {
+                feeUnitPerGasOrByte = 20; // sats per byte
+                feeMax = 10000;
+            }
+            if (wallet is EthWallet)
+            {
+                feeUnitPerGasOrByte = 20000000000; // gas price (wei) 
+                feeMax = 21000 * feeUnitPerGasOrByte * 10;
+            }
+            var tagList = opts.Tags.Split(',')
+                    .Select(m => { return m.Trim(); })
+                    .ToList();
+            var txids = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnitPerGasOrByte);
+            foreach (var txid in txids)
+                Console.WriteLine(txid);
+            wallet.Save(opts.Filename);
+            return 0;
+        }
+
         static int RunShowUnAckAndReturnExitCode(ShowUnAckOptions opts)
         {
             var walletType = Util.GetWalletType(opts.Filename);
@@ -213,13 +257,14 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
                 (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),
+                (ConsolidateOptions opts) => RunConsolidateAndReturnExitCode(opts),
                 (ShowUnAckOptions opts) => RunShowUnAckAndReturnExitCode(opts),
                 (AckOptions opts) => RunAckAndReturnExitCode(opts),
                 errs => 1);
