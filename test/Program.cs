@@ -11,6 +11,19 @@ namespace test
 {
     class Program
     {
+        [Verb("newbtcwallet", HelpText = "New bitcoin wallet")]
+        class NewBtcWalletOptions
+        { 
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+        }
+
+        [Verb("newethwallet", HelpText = "New ethereum wallet")]
+        class NewEthWalletOptions
+        { 
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+        }
 
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions
@@ -95,6 +108,20 @@ namespace test
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(seed, filename, false, "https://ropsten.infura.io", "http://localhost:5001");
             return null;
+        }
+
+        static int RunNewBtcWalletAndReturnExitCode(NewBtcWalletOptions opts)
+        {
+            var wallet = CreateWallet(opts.Filename, BtcWallet.TYPE);
+            wallet.Save(opts.Filename);
+            return 0;
+        }
+
+        static int RunNewEthWalletAndReturnExitCode(NewEthWalletOptions opts)
+        {
+            var wallet = CreateWallet(opts.Filename, EthWallet.TYPE);
+            wallet.Save(opts.Filename);
+            return 0;
         }
 
         static int RunShowAndReturnExitCode(ShowOptions opts)
@@ -186,8 +213,10 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<ShowOptions, NewAddrOptions, SpendOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
+                (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
+                (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),

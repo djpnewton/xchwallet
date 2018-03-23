@@ -4,6 +4,7 @@
 *.log
 *.db
 *.json
+*.retry
 
 obj/
 bin/
