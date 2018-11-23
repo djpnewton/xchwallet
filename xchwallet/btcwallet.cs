@@ -40,7 +40,6 @@ namespace xchwallet
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
-        NBXplorer.Models.UTXOChanges utxoChanges = null;
         WalletData wd = new WalletData{Addresses = new Addrs(), Txs = new AddrTxs()};
 
         public BtcWallet(string seedHex, string filename, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false)
@@ -57,14 +56,14 @@ namespace xchwallet
             // create NBXplorer client
             NBXplorerNetwork nbxnetwork;
             if (network == Network.Main)
-                nbxnetwork = new NBXplorerNetworkProvider(ChainType.Main).GetFromCryptoCode("BTC");
+                nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Mainnet).GetFromCryptoCode("BTC");
             else if (network == Network.TestNet)
-                nbxnetwork = new NBXplorerNetworkProvider(ChainType.Test).GetFromCryptoCode("BTC");
+                nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Testnet).GetFromCryptoCode("BTC");
             else 
                 throw new Exception("unsupported network");
             client = new ExplorerClient(nbxnetwork, nbxplorerAddress);
             client.Track(pubkey);
-            UpdateTxs(noWait: true);
+            UpdateTxs();
         }
 
         public void Save(string filename)
@@ -147,16 +146,13 @@ namespace xchwallet
             wd.Txs[tx.To] = txs;
         }
 
-        private void UpdateTxs(bool noWait = false)
+        private void UpdateTxs()
         {
-            utxoChanges = client.GetUTXOs(pubkey, utxoChanges, noWait);
-            if (utxoChanges.HasChanges)
-            {
-                foreach (var item in utxoChanges.Unconfirmed.UTXOs)
-                    processUtxo(item);
-                foreach (var item in utxoChanges.Confirmed.UTXOs)
-                    processUtxo(item);
-            }
+            var utxos = client.GetUTXOs(pubkey);
+            foreach (var item in utxos.Unconfirmed.UTXOs)
+                processUtxo(item);
+            foreach (var item in utxos.Confirmed.UTXOs)
+                processUtxo(item);
         }
 
         void AddTxs(List<ITransaction> txs, string address)
@@ -242,14 +238,14 @@ namespace xchwallet
         public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
             // create tx template with destination as first output
-            var tx = new Transaction();
+            var tx = Transaction.Create(client.Network.NBitcoinNetwork);
             var money = new Money((ulong)amount);
             var toaddr = BitcoinAddress.Create(to, client.Network.NBitcoinNetwork);
-            var output = tx.AddOutput(money, toaddr);
+            var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tag
             var addrs = GetAddresses(tag);
             var candidates = new List<Tuple<Coin, string>>();
-            var utxos = client.GetUTXOs(pubkey, null);
+            var utxos = client.GetUTXOs(pubkey);
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
@@ -267,7 +263,7 @@ namespace xchwallet
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.AddInput(new TxIn(candidate.Item1.Outpoint));
+                tx.Inputs.Add(new TxIn(candidate.Item1.Outpoint));
                 toBeSpent.Add(candidate.Item1);
                 totalInput += candidate.Item1.Amount.Satoshi;
                 var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
@@ -293,7 +289,7 @@ namespace xchwallet
                 var changeOutput = new TxOut(currentFee - targetFee, changeAddress);
                 targetFee += output.GetSerializedSize() * (long)feeUnitPerGasOrByte;
                 // add the change output
-                changeOutput = tx.AddOutput(currentFee - targetFee, changeAddress);
+                changeOutput = tx.Outputs.Add(currentFee - targetFee, changeAddress);
             }
             // sign inputs (after adding a change output)
             tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
@@ -323,13 +319,13 @@ namespace xchwallet
             foreach (var tag in tagFrom)
                 amount += this.GetBalance(tag);
             // create tx template with destination as first output
-            var tx = new Transaction();
+            var tx = Transaction.Create(client.Network.NBitcoinNetwork);
             var money = new Money((ulong)amount);
             var toaddr = BitcoinAddress.Create(to.Address, client.Network.NBitcoinNetwork);
-            var output = tx.AddOutput(money, toaddr);
+            var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tags
             var candidates = new List<Tuple<Coin, string>>();
-            var utxos = client.GetUTXOs(pubkey, null);
+            var utxos = client.GetUTXOs(pubkey);
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
@@ -351,7 +347,7 @@ namespace xchwallet
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.AddInput(new TxIn(candidate.Item1.Outpoint));
+                tx.Inputs.Add(new TxIn(candidate.Item1.Outpoint));
                 toBeSpent.Add(candidate.Item1);
                 totalInput += candidate.Item1.Amount.Satoshi;
                 var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;

@@ -3,7 +3,7 @@
     <ProjectReference Include="..\NBXplorer\NBXplorer.Client\NBXplorer.Client.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.JSON" Version="10.0.3" />
+    <PackageReference Include="Newtonsoft.JSON" Version="11.0.2" />
     <PackageReference Include="Nethereum.HdWallet" Version="2.2.3" />
     <PackageReference Include="Nethereum.Web3" Version="2.2.3" />
   </ItemGroup>
