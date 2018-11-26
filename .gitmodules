@@ -1,3 +1,6 @@
 [submodule "NBXplorer"]
 	path = NBXplorer
 	url = https://github.com/dgarage/NBXplorer.git
+[submodule "WavesCS"]
+	path = WavesCS
+	url = https://github.com/djpnewton/WavesCS.git

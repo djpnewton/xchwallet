@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\NBXplorer\NBXplorer.Client\NBXplorer.Client.csproj" />
+    <ProjectReference Include="..\WavesCS\WavesCS\WavesCS.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.JSON" Version="11.0.2" />

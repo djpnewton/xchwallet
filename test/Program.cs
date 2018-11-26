@@ -25,6 +25,13 @@ namespace test
             public string Filename { get; set; }
         }
 
+        [Verb("newwavwallet", HelpText = "New waves wallet")]
+        class NewWavWalletOptions
+        {
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+        }
+
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions
         { 
@@ -120,6 +127,8 @@ namespace test
                 return new BtcWallet(seed, filename, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(seed, filename, false, "https://ropsten.infura.io", "http://localhost:5001");
+            else if (walletType == WavWallet.TYPE)
+                return new WavWallet(seed, filename, false, new Uri("https://testnodes.wavesnodes.com"));
             return null;
         }
 
@@ -133,6 +142,13 @@ namespace test
         static int RunNewEthWalletAndReturnExitCode(NewEthWalletOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, EthWallet.TYPE);
+            wallet.Save(opts.Filename);
+            return 0;
+        }
+
+        static int RunNewWavWalletAndReturnExitCode(NewWavWalletOptions opts)
+        {
+            var wallet = CreateWallet(opts.Filename, WavWallet.TYPE);
             wallet.Save(opts.Filename);
             return 0;
         }
@@ -257,10 +273,11 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
                 (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
+                (NewWavWalletOptions opts) => RunNewWavWalletAndReturnExitCode(opts),
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),

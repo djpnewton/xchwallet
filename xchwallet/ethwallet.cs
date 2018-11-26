@@ -55,29 +55,13 @@ namespace xchwallet
         WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AcctTxs(), LastPathIndex = 0};
         bool mainNet;
 
-        byte[] ParseHexString(string hex)
-        {
-            if ((hex.Length % 2) != 0)
-                throw new ArgumentException("Invalid length: " + hex.Length);
-
-            if (hex.StartsWith("0x", StringComparison.InvariantCultureIgnoreCase))
-                hex = hex.Substring(2);
-
-            int arrayLength = hex.Length / 2;
-            byte[] byteArray = new byte[arrayLength];
-            for (int i = 0; i < arrayLength; i++)
-                byteArray[i] = byte.Parse(hex.Substring(i*2, 2), NumberStyles.HexNumber);
-
-            return byteArray;
-        }
-
         public EthWallet(string seedHex, string filename, bool mainNet, string gethAddress, string gethTxScanAddress)
         {
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
                 wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
             // create HD wallet from seed
-            wallet = new Wallet(ParseHexString(seedHex), PATH);
+            wallet = new Wallet(Utils.ParseHexString(seedHex), PATH);
 
             // create web3 client
             web3 = new Web3(gethAddress);
