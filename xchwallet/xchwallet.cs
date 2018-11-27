@@ -60,6 +60,7 @@ namespace xchwallet
         IEnumerable<ITransaction> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
+        //TODO: rename feeUnitPerGasOrByte to just feeUnit
         IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
         IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);

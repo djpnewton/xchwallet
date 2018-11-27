@@ -8,12 +8,12 @@ using WavesCS;
 
 namespace xchwallet
 {
-    using Addrs = Dictionary<string, List<WavAddress>>;
+    using Accts = Dictionary<string, List<WavAccount>>;
     using AddrTxs = Dictionary<string, List<WavTransaction>>;
 
-    public class WavAddress : BaseAddress
+    public class WavAccount : BaseAddress
     {
-        public WavAddress(string tag, string path, string address) : base(tag, path, address)
+        public WavAccount(string tag, string path, string address) : base(tag, path, address)
         {}
     }
 
@@ -30,12 +30,12 @@ namespace xchwallet
         struct WalletData
         {
             public string Type;
-            public Addrs Addresses;
+            public Accts Accounts;
             public AddrTxs Txs;
             public int Nonce;
         }
 
-        WalletData wd = new WalletData{Addresses = new Addrs(), Txs = new AddrTxs(), Nonce = 0};
+        WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AddrTxs(), Nonce = 0};
         string seedHex;
         bool mainNet;
         Node node;
@@ -79,19 +79,19 @@ namespace xchwallet
 
         public IEnumerable<string> GetTags()
         {
-            return wd.Addresses.Keys;
+            return wd.Accounts.Keys;
         }
 
-        void AddAddress(string tag, WavAddress address)
+        void AddAddress(string tag, WavAccount address)
         {
             // add to address list
-            if (wd.Addresses.ContainsKey(tag))
-                wd.Addresses[tag].Add(address);
+            if (wd.Accounts.ContainsKey(tag))
+                wd.Accounts[tag].Add(address);
             else
             {
-                var list = new List<WavAddress>();
+                var list = new List<WavAccount>();
                 list.Add(address);
-                wd.Addresses[tag] = list;
+                wd.Accounts[tag] = list;
             }
         }
 
@@ -101,7 +101,7 @@ namespace xchwallet
             wd.Nonce++;
             var acct = CreateAccount(nonce);
             // create new address that is unused
-            var address = new WavAddress(tag, nonce.ToString(), acct.Address);
+            var address = new WavAccount(tag, nonce.ToString(), acct.Address);
             // add to address list
             AddAddress(tag, address);
             return address;
@@ -109,8 +109,8 @@ namespace xchwallet
 
         public IEnumerable<IAddress> GetAddresses(string tag)
         {
-            if (wd.Addresses.ContainsKey(tag))
-                return wd.Addresses[tag];
+            if (wd.Accounts.ContainsKey(tag))
+                return wd.Accounts[tag];
             return new List<IAddress>();
         }
 
@@ -179,8 +179,8 @@ namespace xchwallet
         public IEnumerable<ITransaction> GetTransactions(string tag)
         {
             var txs = new List<ITransaction>(); 
-            if (wd.Addresses.ContainsKey(tag))
-                foreach (var item in wd.Addresses[tag])
+            if (wd.Accounts.ContainsKey(tag))
+                foreach (var item in wd.Accounts[tag])
                 {
                     UpdateTxs(item.Address);
                     AddTxs(txs, item.Address);
@@ -198,13 +198,11 @@ namespace xchwallet
 
         public BigInteger GetBalance(string tag)
         {
-            if (wd.Addresses.ContainsKey(tag))
+            if (wd.Accounts.ContainsKey(tag))
             {
                 BigInteger total = 0;
-                foreach (var item in wd.Addresses[tag])
-                    if (wd.Txs.ContainsKey(item.Address))
-                        foreach (var tx in wd.Txs[item.Address])
-                            total += tx.Amount;
+                foreach (var item in wd.Accounts[tag])
+                    total += GetAddrBalance(item.Address);
                 return total;
             }
             return 0;
@@ -229,9 +227,74 @@ namespace xchwallet
             return 0;
         }
 
+        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
+            out List<Tuple<string, TransferTransaction>> signedSpendTxs)
+        {
+            signedSpendTxs = new List<Tuple<string, TransferTransaction>>();
+            var amountRemaining = amount;
+            var feeTotal = new BigInteger(0);
+            foreach (var acct in candidates)
+            {
+                if (amountRemaining == 0)
+                    break;
+                // get balance for the account
+                var balance = GetAddrBalance(acct.Address);
+                // if the balance is greater then the fee we can use this account
+                if (balance > fee)
+                {
+                    // calcuate the actual amount we will use from this account
+                    var amountThisAddress = balance - fee;
+                    if (amountThisAddress > amountRemaining)
+                        amountThisAddress = amountRemaining;
+                    // create signed transaction
+                    var account = CreateAccount(Int32.Parse(acct.Path));
+                    var amountDecimal = Assets.WAVES.LongToAmount((long)amount); //TODO: how can we use our biginteger
+                    var feeDecimal = Assets.WAVES.LongToAmount((long)fee);       //TODO: ditto
+                    var tx = new TransferTransaction(account.PublicKey, to, Assets.WAVES, amountDecimal, feeDecimal);
+                    tx.Sign(account);
+                    // update spend tx list and amount remaining
+                    amountRemaining -= amountThisAddress;
+                    signedSpendTxs.Add(new Tuple<string, TransferTransaction>(acct.Address, tx));
+                }
+                feeTotal += fee;
+            }
+             if (feeTotal > feeMax)
+                return false; //TODO: error code??
+            return amountRemaining == 0; //TODO: error code??
+        }
+
+        void AddOutgoingTx(string from, TransferTransaction signedTx)
+        {
+            if (!wd.Txs.ContainsKey(from))
+                wd.Txs[from] = new List<WavTransaction>();
+            var fee = Assets.WAVES.AmountToLong(signedTx.Fee);
+            var amount = Assets.WAVES.AmountToLong(signedTx.Amount);
+            if (from == signedTx.Recipient) // special case if we send to ourselves
+                amount = 0;
+            wd.Txs[from].Add(new WavTransaction(signedTx.GenerateId(), from, signedTx.Recipient, WalletDirection.Outgoing,
+                amount, fee, 0));
+        }
+
         public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
-            throw new Exception("Not yet implemented");
+            List<string> txids = new List<string>();
+            // create spend transaction from accounts
+            var accts = GetAddresses(tag);
+            List<Tuple<string, TransferTransaction>> signedSpendTxs;
+            if (CreateSpendTxs(accts, to, amount, feeUnitPerGasOrByte, feeMax, out signedSpendTxs))
+            {
+                // send each raw signed transaction and get the txid
+                foreach (var tx in signedSpendTxs)
+                {
+                    var output = node.Broadcast(tx.Item2);
+                    System.Console.WriteLine(output); //TODO: debug
+                    var txid = tx.Item2.GenerateId();
+                    txids.Add(txid);
+                    // add to wallet data
+                    AddOutgoingTx(tx.Item1, tx.Item2);
+                }
+            }
+            return txids;
         }
 
         public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
@@ -242,8 +305,8 @@ namespace xchwallet
         public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
         {
             var txs = new List<WavTransaction>();
-            if (wd.Addresses.ContainsKey(tag))
-                foreach (var addr in wd.Addresses[tag])
+            if (wd.Accounts.ContainsKey(tag))
+                foreach (var addr in wd.Accounts[tag])
                     if (wd.Txs.ContainsKey(addr.Address))
                         foreach (var tx in wd.Txs[addr.Address])
                             if (!tx.Acknowledged)

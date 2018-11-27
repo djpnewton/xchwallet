@@ -6,6 +6,7 @@
 *.json
 *.retry
 
+.DS_Store
 obj/
 bin/
 .vagrant/

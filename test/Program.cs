@@ -181,6 +181,27 @@ namespace test
             return 0;
         }
 
+        static void setFees(IWallet wallet, ref BigInteger feeUnitPerGasOrByte, ref BigInteger feeMax)
+        {
+            if (wallet is BtcWallet)
+            {
+                feeUnitPerGasOrByte = 20; // sats per byte
+                feeMax = 10000;
+            }
+            else if (wallet is EthWallet)
+            {
+                feeUnitPerGasOrByte = 20000000000; // gas price (wei)
+                feeMax = 21000 * feeUnitPerGasOrByte * 10;
+            }
+            else if (wallet is WavWallet)
+            {
+                feeUnitPerGasOrByte = 100000; // fee per tx
+                feeMax = feeUnitPerGasOrByte * 10;
+            }
+            else
+                throw new Exception("fees not set!!");
+        }
+
         static int RunSpendAndReturnExitCode(SpendOptions opts)
         {
             var walletType = Util.GetWalletType(opts.Filename);
@@ -192,16 +213,7 @@ namespace test
             }
             var feeUnitPerGasOrByte = new BigInteger(0);
             var feeMax = new BigInteger(0);
-            if (wallet is BtcWallet)
-            {
-                feeUnitPerGasOrByte = 20; // sats per byte
-                feeMax = 10000;
-            }
-            if (wallet is EthWallet)
-            {
-                feeUnitPerGasOrByte = 20000000000; // gas price (wei) 
-                feeMax = 21000 * feeUnitPerGasOrByte * 10;
-            }
+            setFees(wallet, ref feeUnitPerGasOrByte, ref feeMax);
             var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnitPerGasOrByte);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
@@ -220,16 +232,7 @@ namespace test
             }
             var feeUnitPerGasOrByte = new BigInteger(0);
             var feeMax = new BigInteger(0);
-            if (wallet is BtcWallet)
-            {
-                feeUnitPerGasOrByte = 20; // sats per byte
-                feeMax = 10000;
-            }
-            if (wallet is EthWallet)
-            {
-                feeUnitPerGasOrByte = 20000000000; // gas price (wei) 
-                feeMax = 21000 * feeUnitPerGasOrByte * 10;
-            }
+            setFees(wallet, ref feeUnitPerGasOrByte, ref feeMax);
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
