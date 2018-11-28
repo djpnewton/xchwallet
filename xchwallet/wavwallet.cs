@@ -228,7 +228,7 @@ namespace xchwallet
         }
 
         bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
-            out List<Tuple<string, TransferTransaction>> signedSpendTxs)
+            out List<Tuple<string, TransferTransaction>> signedSpendTxs, bool ignoreFees=false)
         {
             signedSpendTxs = new List<Tuple<string, TransferTransaction>>();
             var amountRemaining = amount;
@@ -248,17 +248,19 @@ namespace xchwallet
                         amountThisAddress = amountRemaining;
                     // create signed transaction
                     var account = CreateAccount(Int32.Parse(acct.Path));
-                    var amountDecimal = Assets.WAVES.LongToAmount((long)amount); //TODO: how can we use our biginteger
-                    var feeDecimal = Assets.WAVES.LongToAmount((long)fee);       //TODO: ditto
-                    var tx = new TransferTransaction(account.PublicKey, to, Assets.WAVES, amountDecimal, feeDecimal);
+                    var amountThisAddressDecimal = Assets.WAVES.LongToAmount((long)amountThisAddress);  //TODO: how can we use our biginteger
+                    var feeDecimal = Assets.WAVES.LongToAmount((long)fee);                              //TODO: ditto
+                    var tx = new TransferTransaction(account.PublicKey, to, Assets.WAVES, amountThisAddressDecimal, feeDecimal);
                     tx.Sign(account);
                     // update spend tx list and amount remaining
                     amountRemaining -= amountThisAddress;
+                    if (ignoreFees)
+                        amountRemaining -= fee;
                     signedSpendTxs.Add(new Tuple<string, TransferTransaction>(acct.Address, tx));
                 }
                 feeTotal += fee;
             }
-             if (feeTotal > feeMax)
+            if (feeTotal > feeMax)
                 return false; //TODO: error code??
             return amountRemaining == 0; //TODO: error code??
         }
@@ -299,7 +301,31 @@ namespace xchwallet
 
         public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
-            throw new Exception("Not yet implemented");
+            List<string> txids = new List<string>();
+            var to = NewAddress(tagTo);
+            BigInteger balance = 0;
+            var accts = new List<IAddress>();
+            foreach (var tag in tagFrom)
+            {
+                balance += GetBalance(tag);
+                var tagAccts = GetAddresses(tag);
+                accts.AddRange(tagAccts);
+            }
+            List<Tuple<string, TransferTransaction>> signedSpendTxs;
+            if (CreateSpendTxs(accts, to.Address, balance, feeUnitPerGasOrByte, feeMax, out signedSpendTxs, ignoreFees: true))
+            {
+                // send each raw signed transaction and get the txid
+                foreach (var tx in signedSpendTxs)
+                {
+                    var output = node.Broadcast(tx.Item2);
+                    System.Console.WriteLine(output); //TODO: debug
+                    var txid = tx.Item2.GenerateId();
+                    txids.Add(txid);
+                    // add to wallet data
+                    AddOutgoingTx(tx.Item1, tx.Item2);
+                }
+            }
+            return txids;
         }
 
         public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
