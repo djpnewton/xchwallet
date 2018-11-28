@@ -239,7 +239,7 @@ namespace xchwallet
             return tx.GetFeeRate(toBeSpent.ToArray());
         }
 
-        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit)
         {
             // create tx template with destination as first output
             var tx = Transaction.Create(client.Network.NBitcoinNetwork);
@@ -283,15 +283,15 @@ namespace xchwallet
             // check fee rate
             var feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
             var currentSatsPerByte = feeRate.FeePerK / 1024;
-            if (currentSatsPerByte > feeUnitPerGasOrByte)
+            if (currentSatsPerByte > feeUnit)
             {
                 // create a change address
                 var changeAddress = AddChangeAddress(tagChange);
                 // calculate the target fee
                 var currentFee = feeRate.GetFee(tx.GetVirtualSize());
-                var targetFee = tx.GetVirtualSize() * (long)feeUnitPerGasOrByte;
+                var targetFee = tx.GetVirtualSize() * (long)feeUnit;
                 var changeOutput = new TxOut(currentFee - targetFee, changeAddress);
-                targetFee += output.GetSerializedSize() * (long)feeUnitPerGasOrByte;
+                targetFee += output.GetSerializedSize() * (long)feeUnit;
                 // add the change output
                 changeOutput = tx.Outputs.Add(currentFee - targetFee, changeAddress);
             }
@@ -314,7 +314,7 @@ namespace xchwallet
             return new List<string>(); 
         }
 
-        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit)
         {
             // generate new address to send to
             var to = NewOrUnusedAddress(tagTo);
@@ -363,7 +363,7 @@ namespace xchwallet
             // adjust fee rate by reducing the output incrementally
             var feeRate = new FeeRate(new Money(0));
             Money currentSatsPerByte = 0;
-            while (currentSatsPerByte < feeUnitPerGasOrByte)
+            while (currentSatsPerByte < feeUnit)
             {
                 tx.Outputs[0].Value -= 1;
 

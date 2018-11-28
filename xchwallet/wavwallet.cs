@@ -283,13 +283,13 @@ namespace xchwallet
                 amount, fee, 0));
         }
 
-        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit)
         {
             List<string> txids = new List<string>();
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
             List<Tuple<string, TransferTransaction>> signedSpendTxs;
-            if (CreateSpendTxs(accts, to, amount, feeUnitPerGasOrByte, feeMax, out signedSpendTxs))
+            if (CreateSpendTxs(accts, to, amount, feeUnit, feeMax, out signedSpendTxs))
             {
                 // send each raw signed transaction and get the txid
                 foreach (var tx in signedSpendTxs)
@@ -305,7 +305,7 @@ namespace xchwallet
             return txids;
         }
 
-        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit)
         {
             List<string> txids = new List<string>();
             var to = NewOrUnusedAddress(tagTo);
@@ -318,7 +318,7 @@ namespace xchwallet
                 accts.AddRange(tagAccts);
             }
             List<Tuple<string, TransferTransaction>> signedSpendTxs;
-            if (CreateSpendTxs(accts, to.Address, balance, feeUnitPerGasOrByte, feeMax, out signedSpendTxs, ignoreFees: true))
+            if (CreateSpendTxs(accts, to.Address, balance, feeUnit, feeMax, out signedSpendTxs, ignoreFees: true))
             {
                 // send each raw signed transaction and get the txid
                 foreach (var tx in signedSpendTxs)

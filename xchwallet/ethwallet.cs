@@ -292,14 +292,14 @@ namespace xchwallet
                 amount, fee, 0));
         }
 
-        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit)
         {
             List<string> txids = new List<string>();
             // get gas price
             //var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
             //gasPriceTask.Wait();
             //var gasPrice = gasPriceTask.Result.Value;
-            var gasPrice = feeUnitPerGasOrByte;
+            var gasPrice = feeUnit;
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
             List<Tuple<string, string>> signedSpendTxs;
@@ -320,9 +320,9 @@ namespace xchwallet
             return txids;
         }
 
-        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit)
         {
-            BigInteger gasPrice = feeUnitPerGasOrByte;
+            BigInteger gasPrice = feeUnit;
 
             List<string> txids = new List<string>();
             var to = NewOrUnusedAddress(tagTo);

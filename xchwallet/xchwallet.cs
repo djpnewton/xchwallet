@@ -62,9 +62,9 @@ namespace xchwallet
         IEnumerable<ITransaction> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
-        //TODO: rename feeUnitPerGasOrByte to just feeUnit
-        IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
-        IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
+        // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
+        IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit);
+        IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
 
@@ -129,8 +129,8 @@ namespace xchwallet
         public abstract IEnumerable<ITransaction> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag);
         public abstract BigInteger GetAddrBalance(string address);
-        public abstract IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
-        public abstract IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
+        public abstract IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit);
+        public abstract IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit);
         public abstract IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         public abstract void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
         public abstract void Save(string filename);

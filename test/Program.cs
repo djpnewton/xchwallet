@@ -201,22 +201,22 @@ namespace test
             return 0;
         }
 
-        static void setFees(IWallet wallet, ref BigInteger feeUnitPerGasOrByte, ref BigInteger feeMax)
+        static void setFees(IWallet wallet, ref BigInteger feeUnit, ref BigInteger feeMax)
         {
             if (wallet is BtcWallet)
             {
-                feeUnitPerGasOrByte = 20; // sats per byte
+                feeUnit = 20; // sats per byte
                 feeMax = 10000;
             }
             else if (wallet is EthWallet)
             {
-                feeUnitPerGasOrByte = 20000000000; // gas price (wei)
-                feeMax = 21000 * feeUnitPerGasOrByte * 10;
+                feeUnit = 20000000000; // gas price (wei)
+                feeMax = 21000 * feeUnit * 10;
             }
             else if (wallet is WavWallet)
             {
-                feeUnitPerGasOrByte = 100000; // fee per tx
-                feeMax = feeUnitPerGasOrByte * 10;
+                feeUnit = 100000; // fee per tx
+                feeMax = feeUnit * 10;
             }
             else
                 throw new Exception("fees not set!!");
@@ -231,10 +231,10 @@ namespace test
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
-            var feeUnitPerGasOrByte = new BigInteger(0);
+            var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
-            setFees(wallet, ref feeUnitPerGasOrByte, ref feeMax);
-            var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnitPerGasOrByte);
+            setFees(wallet, ref feeUnit, ref feeMax);
+            var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
             wallet.Save(opts.Filename);
@@ -250,13 +250,13 @@ namespace test
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
-            var feeUnitPerGasOrByte = new BigInteger(0);
+            var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
-            setFees(wallet, ref feeUnitPerGasOrByte, ref feeMax);
+            setFees(wallet, ref feeUnit, ref feeMax);
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            var txids = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnitPerGasOrByte);
+            var txids = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
             wallet.Save(opts.Filename);
