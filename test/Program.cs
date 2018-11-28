@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Collections.Generic;
 using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
@@ -234,7 +235,9 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            var txids = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit);
+            IEnumerable<string> txids;
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out txids);
+            Console.WriteLine(res);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
             wallet.Save(opts.Filename);
@@ -256,7 +259,9 @@ namespace test
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            var txids = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit);
+            IEnumerable<string> txids;
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out txids);
+            Console.WriteLine(res);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
             wallet.Save(opts.Filename);

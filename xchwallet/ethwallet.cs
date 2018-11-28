@@ -242,7 +242,7 @@ namespace xchwallet
             return 0;
         }
 
-        bool CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
+        WalletError CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
             out List<Tuple<string, string>> signedSpendTxs)
         {
             signedSpendTxs = new List<Tuple<string, string>>();
@@ -276,9 +276,10 @@ namespace xchwallet
             }
             logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
             logger.Debug("amountRemaining {0}", amountRemaining);
-            if (feeTotal > feeMax)
-                return false; //TODO: error code??
-            return amountRemaining == 0; //TODO: error code??
+                return WalletError.MaxFeeBreached;
+            if (amountRemaining != 0)
+                return WalletError.InsufficientFunds;
+            return WalletError.Success;
         }
 
         void AddOutgoingTx(string from, string signedTx)
@@ -292,9 +293,9 @@ namespace xchwallet
                 amount, fee, 0));
         }
 
-        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
         {
-            List<string> txids = new List<string>();
+            txids = new List<string>();
             // get gas price
             //var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
             //gasPriceTask.Wait();
@@ -304,27 +305,36 @@ namespace xchwallet
             var accts = GetAddresses(tag);
             List<Tuple<string, string>> signedSpendTxs;
                     //TODO: check gas price, and/or allow custom setting (max total wei too?)
-            if (CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, feeMax, out signedSpendTxs))
+            var res = CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, feeMax, out signedSpendTxs);
+            if (res == WalletError.Success)
             {
                 // send each raw signed transaction and get the txid
                 foreach (var tx in signedSpendTxs)
                 {
-                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
-                    sendTxTask.Wait();
-                    var txid = sendTxTask.Result;
-                    txids.Add(txid);
+                    try
+                    {
+                        var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
+                        sendTxTask.Wait();
+                        var txid = sendTxTask.Result;
+                        ((List<string>)txids).Add(txid);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex);
+                        return WalletError.PartialBroadcast;
+                    }
                     // add to wallet data
                     AddOutgoingTx(tx.Item1, tx.Item2);
                 }
             }
-            return txids;
+            return res;
         }
 
-        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
         {
             BigInteger gasPrice = feeUnit;
 
-            List<string> txids = new List<string>();
+            txids = new List<string>();
             var to = NewOrUnusedAddress(tagTo);
             BigInteger balance = 0;
             var accts = new List<IAddress>();
@@ -335,20 +345,29 @@ namespace xchwallet
                 accts.AddRange(tagAccts);
             }
             List<Tuple<string, string>> signedSpendTxs;
-            if (CreateSpendTxs(accts, to.Address, balance, gasPrice, TX_GAS, feeMax, out signedSpendTxs))
+            var res = CreateSpendTxs(accts, to.Address, balance, gasPrice, TX_GAS, feeMax, out signedSpendTxs);
+            if (res == WalletError.Success)
             {
                 // send each raw signed transaction and get the txid
                 foreach (var tx in signedSpendTxs)
                 {
-                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
-                    sendTxTask.Wait();
-                    var txid = sendTxTask.Result;
-                    txids.Add(txid);
+                    try
+                    {
+                        var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
+                        sendTxTask.Wait();
+                        var txid = sendTxTask.Result;
+                        ((List<string>)txids).Add(txid);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex);
+                        return WalletError.PartialBroadcast;
+                    }
                     // add to wallet data
                     AddOutgoingTx(tx.Item1, tx.Item2);
                 }
             }
-            return txids;
+            return res;
         }
 
         public override IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)

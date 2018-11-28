@@ -239,8 +239,9 @@ namespace xchwallet
             return tx.GetFeeRate(toBeSpent.ToArray());
         }
 
-        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
         {
+            txids = new List<string>();
             // create tx template with destination as first output
             var tx = Transaction.Create(client.Network.NBitcoinNetwork);
             var money = new Money((ulong)amount);
@@ -279,7 +280,7 @@ namespace xchwallet
             }
             // check we have enough inputs
             if (totalInput < amount)
-                return new List<string>(); //TODO: error codes?
+                return WalletError.InsufficientFunds;
             // check fee rate
             var feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
             var currentSatsPerByte = feeRate.FeePerK / 1024;
@@ -300,22 +301,26 @@ namespace xchwallet
             // recalculate fee rate and check it is less then the max fee
             var fee = tx.GetFee(toBeSpent.ToArray());
             if (fee.Satoshi > feeMax)
-                return new List<string>(); //TODO: error codes?
+                return WalletError.MaxFeeBreached;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
                 AddOutgoingTx(tx.GetHash().ToString(), tag, to, amount, fee.Satoshi);
-                return new List<string>() {tx.GetHash().ToString()};
+                ((List<string>)txids).Add(tx.GetHash().ToString());
+                return WalletError.Success;
             }
             else
+            {
                 logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
-            return new List<string>(); 
+                return WalletError.FailedBroadcast;
+            }
         }
 
-        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
         {
+            txids = new List<string>();
             // generate new address to send to
             var to = NewOrUnusedAddress(tagTo);
             // calc amount in tagFrom
@@ -359,7 +364,7 @@ namespace xchwallet
             }
             // check we have enough inputs
             if (totalInput < amount)
-                return new List<string>(); //TODO: error codes?
+                return WalletError.InsufficientFunds;
             // adjust fee rate by reducing the output incrementally
             var feeRate = new FeeRate(new Money(0));
             Money currentSatsPerByte = 0;
@@ -375,18 +380,21 @@ namespace xchwallet
             // recalculate fee rate and check it is less then the max fee
             var fee = tx.GetFee(toBeSpent.ToArray());
             if (fee.Satoshi > feeMax)
-                return new List<string>(); //TODO: error codes?
+                return WalletError.MaxFeeBreached;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
                 AddOutgoingTx(tx.GetHash().ToString(), tagTo, to.Address, amount, fee.Satoshi);
-                return new List<string>() {tx.GetHash().ToString()};
+                ((List<string>)txids).Add(tx.GetHash().ToString());
+                return WalletError.Success;
             }
             else
+            {
                 logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
-            return new List<string>(); 
+                return WalletError.FailedBroadcast;
+            }
         }
 
         public override IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
