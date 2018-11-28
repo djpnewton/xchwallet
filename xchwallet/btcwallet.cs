@@ -7,6 +7,7 @@ using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
 using Newtonsoft.Json;
+using NLog;
 
 namespace xchwallet
 {
@@ -41,9 +42,12 @@ namespace xchwallet
         readonly DirectDerivationStrategy pubkey = null;
 
         WalletData wd = new WalletData{Addresses = new Addrs(), Txs = new AddrTxs()};
+        ILogger logger;
 
-        public BtcWallet(string seedHex, string filename, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false)
+        public BtcWallet(ILogger logger, string seedHex, string filename, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false)
         {
+            this.logger = logger;
+
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
                 wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
@@ -223,7 +227,7 @@ namespace xchwallet
         {
             if (!wd.Txs.ContainsKey(from))
                 wd.Txs[from] = new List<BtcTransaction>();
-            Console.WriteLine("{0}, {1}", amount, fee);
+            logger.Debug("amount: {0}, fee: {1}", amount, fee);
             wd.Txs[from].Add(new BtcTransaction(txid, from, to, WalletDirection.Outgoing,
                 amount, fee, 0));
         }
@@ -306,7 +310,7 @@ namespace xchwallet
                 return new List<string>() {tx.GetHash().ToString()};
             }
             else
-                Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+                logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
             return new List<string>(); 
         }
 
@@ -381,7 +385,7 @@ namespace xchwallet
                 return new List<string>() {tx.GetHash().ToString()};
             }
             else
-                Console.WriteLine("ERROR: {0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+                logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
             return new List<string>(); 
         }
 

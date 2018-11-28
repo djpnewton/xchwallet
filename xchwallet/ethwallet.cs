@@ -10,6 +10,7 @@ using Nethereum.HdWallet;
 using Nethereum.Signer;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Newtonsoft.Json;
+using NLog;
 
 namespace xchwallet
 {
@@ -54,9 +55,12 @@ namespace xchwallet
 
         WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AcctTxs(), LastPathIndex = 0};
         bool mainNet;
+        ILogger logger;
 
-        public EthWallet(string seedHex, string filename, bool mainNet, string gethAddress, string gethTxScanAddress)
+        public EthWallet(ILogger logger, string seedHex, string filename, bool mainNet, string gethAddress, string gethTxScanAddress)
         {
+            this.logger = logger;
+
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
                 wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
@@ -270,6 +274,8 @@ namespace xchwallet
                 }
                 feeTotal += fee;
             }
+            logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
+            logger.Debug("amountRemaining {0}", amountRemaining);
             if (feeTotal > feeMax)
                 return false; //TODO: error code??
             return amountRemaining == 0; //TODO: error code??

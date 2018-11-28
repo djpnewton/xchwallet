@@ -5,6 +5,7 @@ using System.Numerics;
 using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
+using NLog;
 using xchwallet;
 
 namespace test
@@ -98,6 +99,23 @@ namespace test
             public string Tag { get; set; }
         }
 
+        static ILogger _logger = null;
+        static ILogger GetLogger()
+        {
+            if (_logger == null)
+            {
+                var config = new NLog.Config.LoggingConfiguration();
+                var logfile = new NLog.Targets.FileTarget("logfile") { FileName = "test.log" };
+                var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
+                config.AddRule(LogLevel.Debug, LogLevel.Fatal, logconsole);
+                config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
+                NLog.LogManager.Configuration = config;
+
+                _logger = NLog.LogManager.GetCurrentClassLogger();
+            }
+            return _logger;
+        }
+
         static void PrintWallet(IWallet wallet)
         {
             var tags = wallet.GetTags();
@@ -122,13 +140,15 @@ namespace test
 
         static IWallet CreateWallet(string filename, string walletType)
         {
+            GetLogger().Debug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
+
             const string seed = "12345678901234567890123456789012";
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(seed, filename, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
+                return new BtcWallet(GetLogger(), seed, filename, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
-                return new EthWallet(seed, filename, false, "https://ropsten.infura.io", "http://localhost:5001");
+                return new EthWallet(GetLogger(), seed, filename, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
-                return new WavWallet(seed, filename, false, new Uri("https://testnodes.wavesnodes.com"));
+                return new WavWallet(GetLogger(), seed, filename, false, new Uri("https://testnodes.wavesnodes.com"));
             return null;
         }
 

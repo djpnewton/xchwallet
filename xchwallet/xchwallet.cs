@@ -54,6 +54,7 @@ namespace xchwallet
     {
         bool IsMainnet();
         IEnumerable<string> GetTags();
+        // TODO: add option to not create an address if there is a unused address
         IAddress NewAddress(string tag);
         IEnumerable<IAddress> GetAddresses(string tag);
         IEnumerable<ITransaction> GetTransactions(string tag);

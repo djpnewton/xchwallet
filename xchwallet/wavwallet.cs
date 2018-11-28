@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Linq;
 using Newtonsoft.Json;
 using WavesCS;
+using NLog;
 
 namespace xchwallet
 {
@@ -39,6 +40,7 @@ namespace xchwallet
         string seedHex;
         bool mainNet;
         Node node;
+        ILogger logger;
 
         char ChainId()
         {
@@ -53,8 +55,10 @@ namespace xchwallet
             return PrivateKeyAccount.CreateFromSeed(seed, ChainId(), nonce);
         }
 
-        public WavWallet(string seedHex, string filename, bool mainNet, Uri nodeAddress)
+        public WavWallet(ILogger logger, string seedHex, string filename, bool mainNet, Uri nodeAddress)
         {
+            this.logger = logger;
+
             // load saved data
             if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
                 wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
@@ -260,6 +264,8 @@ namespace xchwallet
                 }
                 feeTotal += fee;
             }
+            logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
+            logger.Debug("amountRemaining {0}", amountRemaining);
             if (feeTotal > feeMax)
                 return false; //TODO: error code??
             return amountRemaining == 0; //TODO: error code??
@@ -289,7 +295,7 @@ namespace xchwallet
                 foreach (var tx in signedSpendTxs)
                 {
                     var output = node.Broadcast(tx.Item2);
-                    System.Console.WriteLine(output); //TODO: debug
+                    logger.Debug(output);
                     var txid = tx.Item2.GenerateId();
                     txids.Add(txid);
                     // add to wallet data
@@ -318,7 +324,7 @@ namespace xchwallet
                 foreach (var tx in signedSpendTxs)
                 {
                     var output = node.Broadcast(tx.Item2);
-                    System.Console.WriteLine(output); //TODO: debug
+                    logger.Debug(output);
                     var txid = tx.Item2.GenerateId();
                     txids.Add(txid);
                     // add to wallet data
