@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace xchwallet
@@ -54,8 +55,8 @@ namespace xchwallet
     {
         bool IsMainnet();
         IEnumerable<string> GetTags();
-        // TODO: add option to not create an address if there is a unused address
         IAddress NewAddress(string tag);
+        IAddress NewOrUnusedAddress(string tag);
         IEnumerable<IAddress> GetAddresses(string tag);
         IEnumerable<ITransaction> GetTransactions(string tag);
         IEnumerable<ITransaction> GetAddrTransactions(string address);
@@ -115,6 +116,34 @@ namespace xchwallet
         public override string ToString()
         {
             return $"<{Id} {From} {To} {Amount} {Confirmations}>";
+        }
+    }
+
+    public abstract class BaseWallet : IWallet
+    {
+        public abstract bool IsMainnet();
+        public abstract IEnumerable<string> GetTags();
+        public abstract IAddress NewAddress(string tag);
+        public abstract IEnumerable<IAddress> GetAddresses(string tag);
+        public abstract IEnumerable<ITransaction> GetTransactions(string tag);
+        public abstract IEnumerable<ITransaction> GetAddrTransactions(string address);
+        public abstract BigInteger GetBalance(string tag);
+        public abstract BigInteger GetAddrBalance(string address);
+        public abstract IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
+        public abstract IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte);
+        public abstract IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
+        public abstract void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+        public abstract void Save(string filename);
+
+        public IAddress NewOrUnusedAddress(string tag)
+        {
+            foreach (var addr in GetAddresses(tag))
+            {
+                var txs = GetAddrTransactions(addr.Address);
+                if (!txs.Any())
+                    return addr;
+            }
+            return NewAddress(tag);
         }
     }
 }

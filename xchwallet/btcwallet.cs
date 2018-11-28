@@ -27,7 +27,7 @@ namespace xchwallet
         {}
     }
 
-    public class BtcWallet : IWallet
+    public class BtcWallet : BaseWallet
     {
         public const string TYPE = "BTC";
         struct WalletData
@@ -70,7 +70,7 @@ namespace xchwallet
             UpdateTxs();
         }
 
-        public void Save(string filename)
+        public override void Save(string filename)
         {
             wd.Type = TYPE;
             // save data
@@ -78,12 +78,12 @@ namespace xchwallet
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
-        public bool IsMainnet()
+        public override bool IsMainnet()
         {
             return client.Network.NBitcoinNetwork == Network.Main;
         }
 
-        public IEnumerable<string> GetTags()
+        public override IEnumerable<string> GetTags()
         {
             return wd.Addresses.Keys;
         }
@@ -101,7 +101,7 @@ namespace xchwallet
             }
         }
 
-        public IAddress NewAddress(string tag)
+        public override IAddress NewAddress(string tag)
         {
             // create new address that is unused
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
@@ -112,7 +112,7 @@ namespace xchwallet
             return address;
         }
 
-        public IEnumerable<IAddress> GetAddresses(string tag)
+        public override IEnumerable<IAddress> GetAddresses(string tag)
         {
             if (wd.Addresses.ContainsKey(tag))
                 return wd.Addresses[tag];
@@ -166,7 +166,7 @@ namespace xchwallet
                     txs.Add(tx);
         }
 
-        public IEnumerable<ITransaction> GetTransactions(string tag)
+        public override IEnumerable<ITransaction> GetTransactions(string tag)
         {
             UpdateTxs();
             var txs = new List<ITransaction>(); 
@@ -176,7 +176,7 @@ namespace xchwallet
             return txs;
         }
 
-        public IEnumerable<ITransaction> GetAddrTransactions(string address)
+        public override IEnumerable<ITransaction> GetAddrTransactions(string address)
         {
             UpdateTxs();
             if (wd.Txs.ContainsKey(address))
@@ -184,7 +184,7 @@ namespace xchwallet
             return new List<ITransaction>(); 
         }
 
-        public BigInteger GetBalance(string tag)
+        public override BigInteger GetBalance(string tag)
         {
             UpdateTxs();
             if (wd.Addresses.ContainsKey(tag))
@@ -199,7 +199,7 @@ namespace xchwallet
             return 0;
         }
 
-        public BigInteger GetAddrBalance(string address)
+        public override BigInteger GetAddrBalance(string address)
         {
             UpdateTxs();
             if (wd.Txs.ContainsKey(address))
@@ -239,7 +239,7 @@ namespace xchwallet
             return tx.GetFeeRate(toBeSpent.ToArray());
         }
 
-        public IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
             // create tx template with destination as first output
             var tx = Transaction.Create(client.Network.NBitcoinNetwork);
@@ -314,10 +314,10 @@ namespace xchwallet
             return new List<string>(); 
         }
 
-        public IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
+        public override IEnumerable<string> Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnitPerGasOrByte)
         {
             // generate new address to send to
-            var to = NewAddress(tagTo);
+            var to = NewOrUnusedAddress(tagTo);
             // calc amount in tagFrom
             BigInteger amount = 0;
             foreach (var tag in tagFrom)
@@ -389,7 +389,7 @@ namespace xchwallet
             return new List<string>(); 
         }
 
-        public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
+        public override IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
         {
             var txs = new List<BtcTransaction>();
             if (wd.Addresses.ContainsKey(tag))
@@ -401,7 +401,7 @@ namespace xchwallet
             return txs;
         }
 
-        public void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
+        public override void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
         {
             foreach (var tx in txs)
             {
