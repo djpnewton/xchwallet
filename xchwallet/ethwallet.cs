@@ -276,6 +276,7 @@ namespace xchwallet
             }
             logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
             logger.Debug("amountRemaining {0}", amountRemaining);
+            if (feeTotal > feeMax)
                 return WalletError.MaxFeeBreached;
             if (amountRemaining != 0)
                 return WalletError.InsufficientFunds;
