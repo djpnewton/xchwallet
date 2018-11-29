@@ -120,56 +120,77 @@ namespace xchwallet
 
         void UpdateTxs(string address)
         {
-            //TODO: handle more then 100 txs in address
-
+            var sufficientTxsQueried = false;
+            var processedTxs = new Dictionary<string, TransferTransaction>();
             var limit = 100;
-            var nodeTxs = node.GetTransactions(address, limit);
-            foreach (var nodeTx in nodeTxs)
-            {
-                if (nodeTx is TransferTransaction)
+            while (!sufficientTxsQueried)
+            {  
+                var nodeTxs = node.GetTransactions(address, limit);
+                logger.Debug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address, nodeTxs.Count(), limit, sufficientTxsQueried);
+ 
+                // if less txs are returned then we requested we have all txs for this account
+                if (nodeTxs.Count() < limit)
+                    sufficientTxsQueried = true;
+
+                foreach (var nodeTx in nodeTxs)
                 {
-                    var trans = (TransferTransaction)nodeTx;
-                    if (trans.Asset.Id == Assets.WAVES.Id)
+                    if (nodeTx is TransferTransaction)
                     {
-                        WavTransaction tx = null;
-                        var id = trans.GenerateId();
-                        var amount = trans.Asset.AmountToLong(trans.Amount);
-                        var fee = trans.FeeAsset.AmountToLong(trans.Fee);
-                        var confs = 0; //TODO: find out confirmations
-                        if (trans.Recipient == address)
+                        var trans = (TransferTransaction)nodeTx;
+                        if (trans.Asset.Id == Assets.WAVES.Id)
                         {
-                            // special case we are recipient and sender
-                            if (trans.Sender == address)
-                                tx = new WavTransaction(id, address, address,
-                                    WalletDirection.Outgoing, 0, fee, confs);
-                            else
-                                tx = new WavTransaction(id, trans.Sender, address,
-                                    WalletDirection.Incomming, amount, fee, confs);
-                        }
-                        else
-                            tx = new WavTransaction(id, trans.Sender, trans.Recipient,
-                                WalletDirection.Outgoing, amount, fee, confs);
-                    
-                        List<WavTransaction> txs = null;
-                        if (wd.Txs.ContainsKey(tx.To))
-                            txs = wd.Txs[tx.To];
-                        else
-                            txs = new List<WavTransaction>();
-                        bool replacedTx = false;
-                        for (var i = 0; i < txs.Count; i++)
-                        {
-                            if (txs[i].Id == tx.Id)
+                            WavTransaction tx = null;
+                            var id = trans.GenerateId();
+
+                            // skip any txs we have already processed
+                            if (processedTxs.ContainsKey(id))
+                                continue;
+
+                            var amount = trans.Asset.AmountToLong(trans.Amount);
+                            var fee = trans.FeeAsset.AmountToLong(trans.Fee);
+                            var confs = 0; //TODO: find out confirmations
+                            if (trans.Recipient == address)
                             {
-                                txs[i] = tx;
-                                replacedTx = true;
-                                break;
+                                // special case we are recipient and sender
+                                if (trans.Sender == address)
+                                    tx = new WavTransaction(id, address, address,
+                                        WalletDirection.Outgoing, 0, fee, confs);
+                                else
+                                    tx = new WavTransaction(id, trans.Sender, address,
+                                        WalletDirection.Incomming, amount, fee, confs);
                             }
+                            else
+                                tx = new WavTransaction(id, trans.Sender, trans.Recipient,
+                                    WalletDirection.Outgoing, amount, fee, confs);
+
+                            List<WavTransaction> txs = null;
+                            if (wd.Txs.ContainsKey(address))
+                                txs = wd.Txs[address];
+                            else
+                                txs = new List<WavTransaction>();
+                            bool replacedTx = false;
+                            for (var i = 0; i < txs.Count; i++)
+                            {
+                                if (txs[i].Id == tx.Id)
+                                {
+                                    txs[i] = tx;
+                                    replacedTx = true;
+
+                                    // if we are replacing txs already in our wallet we have queried sufficent txs for this account
+                                    sufficientTxsQueried = true;
+                                    break;
+                                }
+                            }
+                            if (!replacedTx)
+                                txs.Add(tx);
+                            wd.Txs[address] = txs;
+
+                            // record the transactions we have processed already
+                            processedTxs[id] = trans;
                         }
-                        if (!replacedTx)
-                            txs.Add(tx);
-                        wd.Txs[tx.To] = txs;
                     }
                 }
+                limit *= 2;
             }
         }
 

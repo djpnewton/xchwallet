@@ -164,10 +164,12 @@ namespace xchwallet
                 var tx = new EthTransaction(scantx.txid, scantx.from_, address, WalletDirection.Incomming,
                     BigInteger.Parse(scantx.value), -1, confirmations);
                 List<EthTransaction> txs = null;
-                if (wd.Txs.ContainsKey(tx.To))
-                    txs = wd.Txs[tx.To];
+
+                if (wd.Txs.ContainsKey(address))
+                    txs = wd.Txs[address];
                 else
                     txs = new List<EthTransaction>();
+
                 bool replacedTx = false;
                 for (var i = 0; i < txs.Count; i++)
                 {
@@ -180,7 +182,7 @@ namespace xchwallet
                 }
                 if (!replacedTx)
                     txs.Add(tx);
-                wd.Txs[tx.To] = txs;
+                wd.Txs[address] = txs;
             }
         }
 
