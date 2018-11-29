@@ -252,8 +252,8 @@ namespace xchwallet
                         amountThisAddress = amountRemaining;
                     // create signed transaction
                     var account = CreateAccount(Int32.Parse(acct.Path));
-                    var amountThisAddressDecimal = Assets.WAVES.LongToAmount((long)amountThisAddress);  //TODO: how can we use our biginteger
-                    var feeDecimal = Assets.WAVES.LongToAmount((long)fee);                              //TODO: ditto
+                    var amountThisAddressDecimal = Assets.WAVES.BigIntToAmount(amountThisAddress);
+                    var feeDecimal = Assets.WAVES.BigIntToAmount(fee);
                     var tx = new TransferTransaction(account.PublicKey, to, Assets.WAVES, amountThisAddressDecimal, feeDecimal);
                     tx.Sign(account);
                     // update spend tx list and amount remaining
@@ -373,6 +373,15 @@ namespace xchwallet
                 System.Diagnostics.Debug.Assert(tx is BaseTransaction);
                 ((BaseTransaction)tx).Acknowledged = true;
             }
+        }
+    }
+
+    public static class AssetExtensons
+    {
+        public static decimal BigIntToAmount<T>(this T asset, BigInteger value) where T: Asset
+        {
+            var _scale = new decimal(1, 0, 0, false, asset.Decimals);
+            return (decimal)value * _scale;
         }
     }
 }

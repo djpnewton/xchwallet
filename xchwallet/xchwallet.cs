@@ -124,7 +124,7 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"<{Id} {From} {To} {Amount} {Confirmations}>";
+            return $"<{Id} {From} {To} {Amount} {Confirmations} {Direction}>";
         }
     }
 
