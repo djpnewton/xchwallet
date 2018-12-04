@@ -7,7 +7,7 @@ using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
 using Newtonsoft.Json;
-using NLog;
+using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
@@ -227,7 +227,7 @@ namespace xchwallet
         {
             if (!wd.Txs.ContainsKey(from))
                 wd.Txs[from] = new List<BtcTransaction>();
-            logger.Debug("amount: {0}, fee: {1}", amount, fee);
+            logger.LogDebug("amount: {0}, fee: {1}", amount, fee);
             wd.Txs[from].Add(new BtcTransaction(txid, from, to, WalletDirection.Outgoing,
                 amount, fee, 0));
         }
@@ -313,7 +313,7 @@ namespace xchwallet
             }
             else
             {
-                logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+                logger.LogError("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
                 return WalletError.FailedBroadcast;
             }
         }
@@ -392,7 +392,7 @@ namespace xchwallet
             }
             else
             {
-                logger.Error("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
+                logger.LogError("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
                 return WalletError.FailedBroadcast;
             }
         }

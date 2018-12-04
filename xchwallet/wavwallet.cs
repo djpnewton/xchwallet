@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Linq;
 using Newtonsoft.Json;
 using WavesCS;
-using NLog;
+using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
@@ -126,7 +126,7 @@ namespace xchwallet
             while (!sufficientTxsQueried)
             {  
                 var nodeTxs = node.GetTransactions(address, limit);
-                logger.Debug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address, nodeTxs.Count(), limit, sufficientTxsQueried);
+                logger.LogDebug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address, nodeTxs.Count(), limit, sufficientTxsQueried);
  
                 // if less txs are returned then we requested we have all txs for this account
                 if (nodeTxs.Count() < limit)
@@ -285,8 +285,8 @@ namespace xchwallet
                 }
                 feeTotal += fee;
             }
-            logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
-            logger.Debug("amountRemaining {0}", amountRemaining);
+            logger.LogDebug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
+            logger.LogDebug("amountRemaining {0}", amountRemaining);
             if (feeTotal > feeMax)
                 return WalletError.MaxFeeBreached;
             if (amountRemaining != 0)
@@ -321,11 +321,11 @@ namespace xchwallet
                     try
                     {
                         var output = node.Broadcast(tx.Item2);
-                        logger.Debug(output);
+                        logger.LogDebug(output);
                     }
                     catch (System.Net.WebException ex)
                     {
-                        logger.Error(ex);
+                        logger.LogError("{0}", ex);
                         return WalletError.PartialBroadcast;
                     }
                     var txid = tx.Item2.GenerateId();
@@ -359,11 +359,11 @@ namespace xchwallet
                     try
                     {
                         var output = node.Broadcast(tx.Item2);
-                        logger.Debug(output);
+                        logger.LogDebug(output);
                     }
                     catch (System.Net.WebException ex)
                     {
-                        logger.Error(ex);
+                        logger.LogError("{0}", ex);
                         return WalletError.PartialBroadcast;
                     }
                     var txid = tx.Item2.GenerateId();

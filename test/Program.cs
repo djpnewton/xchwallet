@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
-using NLog;
+using Microsoft.Extensions.Logging;
 using xchwallet;
 
 namespace test
@@ -105,14 +105,8 @@ namespace test
         {
             if (_logger == null)
             {
-                var config = new NLog.Config.LoggingConfiguration();
-                var logfile = new NLog.Targets.FileTarget("logfile") { FileName = "test.log" };
-                var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
-                config.AddRule(LogLevel.Debug, LogLevel.Fatal, logconsole);
-                config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
-                NLog.LogManager.Configuration = config;
-
-                _logger = NLog.LogManager.GetCurrentClassLogger();
+                var factory = new LoggerFactory().AddConsole(LogLevel.Debug).AddFile("test.log", minimumLevel: LogLevel.Debug);
+                _logger = factory.CreateLogger("main");
             }
             return _logger;
         }
@@ -141,7 +135,7 @@ namespace test
 
         static IWallet CreateWallet(string filename, string walletType)
         {
-            GetLogger().Debug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
+            GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
             const string seed = "12345678901234567890123456789012";
             if (walletType == BtcWallet.TYPE)

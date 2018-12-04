@@ -10,7 +10,7 @@ using Nethereum.HdWallet;
 using Nethereum.Signer;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Newtonsoft.Json;
-using NLog;
+using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
@@ -276,8 +276,8 @@ namespace xchwallet
                 }
                 feeTotal += fee;
             }
-            logger.Debug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
-            logger.Debug("amountRemaining {0}", amountRemaining);
+            logger.LogDebug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
+            logger.LogDebug("amountRemaining {0}", amountRemaining);
             if (feeTotal > feeMax)
                 return WalletError.MaxFeeBreached;
             if (amountRemaining != 0)
@@ -323,7 +323,7 @@ namespace xchwallet
                     }
                     catch (Exception ex)
                     {
-                        logger.Error(ex);
+                        logger.LogError("{0}", ex);
                         return WalletError.PartialBroadcast;
                     }
                     // add to wallet data
@@ -363,7 +363,7 @@ namespace xchwallet
                     }
                     catch (Exception ex)
                     {
-                        logger.Error(ex);
+                        logger.LogError("{0}", ex);
                         return WalletError.PartialBroadcast;
                     }
                     // add to wallet data
