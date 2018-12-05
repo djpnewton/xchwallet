@@ -63,6 +63,7 @@ namespace xchwallet
 
     public interface IWallet
     {
+        string Type();
         bool IsMainnet();
         IEnumerable<string> GetTags();
         IAddress NewAddress(string tag);
@@ -77,6 +78,7 @@ namespace xchwallet
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+        string AmountToHumanFriendly(BigInteger value);
 
         void Save(string filename);
     }
@@ -131,6 +133,7 @@ namespace xchwallet
 
     public abstract class BaseWallet : IWallet
     {
+        public abstract string Type();
         public abstract bool IsMainnet();
         public abstract IEnumerable<string> GetTags();
         public abstract IAddress NewAddress(string tag);
@@ -142,6 +145,7 @@ namespace xchwallet
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
+        public abstract string AmountToHumanFriendly(BigInteger value);
         public abstract void Save(string filename);
 
         public IAddress NewOrUnusedAddress(string tag)

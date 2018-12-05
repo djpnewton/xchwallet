@@ -76,6 +76,11 @@ namespace xchwallet
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
+        public override string Type()
+        {
+            return WavWallet.TYPE;
+        }
+
         public override bool IsMainnet()
         {
             return mainNet;
@@ -383,6 +388,11 @@ namespace xchwallet
                     if (!tx.Acknowledged)
                         txs.Add(tx);
             return txs;
+        }
+
+        public override string AmountToHumanFriendly(BigInteger value)
+        {
+            return Assets.WAVES.BigIntToAmount(value).ToString();
         }
     }
 

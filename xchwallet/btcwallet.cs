@@ -78,6 +78,11 @@ namespace xchwallet
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
+        public override string Type()
+        {
+            return BtcWallet.TYPE;
+        }
+
         public override bool IsMainnet()
         {
             return client.Network.NBitcoinNetwork == Network.Main;
@@ -405,6 +410,13 @@ namespace xchwallet
                     if (!tx.Acknowledged)
                         txs.Add(tx);
             return txs;
+        }
+
+        public override string AmountToHumanFriendly(BigInteger value)
+        {
+            var _scale = new decimal(1, 0, 0, false, 8);
+            var d = (decimal)value * _scale;
+            return d.ToString();
         }
     }
 }

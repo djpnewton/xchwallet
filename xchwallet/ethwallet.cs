@@ -93,6 +93,11 @@ namespace xchwallet
                 File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
+        public override string Type()
+        {
+            return EthWallet.TYPE;
+        }
+
         public override bool IsMainnet()
         {
             return mainNet;
@@ -381,6 +386,13 @@ namespace xchwallet
                     if (!tx.Acknowledged)
                         txs.Add(tx);
             return txs;
+        }
+
+        public override string AmountToHumanFriendly(BigInteger value)
+        {
+            var _scale = new decimal(1, 0, 0, false, 18);
+            var d = (decimal)value * _scale;
+            return d.ToString();
         }
     }
 }

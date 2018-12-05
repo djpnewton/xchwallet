@@ -129,7 +129,7 @@ namespace test
                 foreach (var tx in txs)
                     Console.WriteLine($"    {tx}");
                 var balance = wallet.GetBalance(tag);
-                Console.WriteLine($"  balance: {balance}");
+                Console.WriteLine($"  balance: {balance} ({wallet.AmountToHumanFriendly(balance)} {wallet.Type()})");
             }
         }
 
