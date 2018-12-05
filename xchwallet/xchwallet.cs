@@ -49,6 +49,7 @@ namespace xchwallet
         BigInteger Amount { get; }
         BigInteger Fee { get; }
         long Confirmations { get; }
+        bool Acknowledged { get; set; }
     }
 
     public enum WalletError
@@ -140,8 +141,7 @@ namespace xchwallet
         public abstract BigInteger GetAddrBalance(string address);
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
-        public abstract IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
-        public abstract void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+        public abstract IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
         public abstract void Save(string filename);
 
         public IAddress NewOrUnusedAddress(string tag)
@@ -153,6 +153,23 @@ namespace xchwallet
                     return addr;
             }
             return NewAddress(tag);
+        }
+
+        public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
+        {
+            var txs = new List<ITransaction>();
+            foreach (var addr in GetAddresses(tag))
+            {
+                var addrTxs = GetAddrUnacknowledgedTransactions(addr.Address);
+                txs.AddRange(addrTxs);
+            }
+            return txs;
+        }
+
+        public void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
+        {
+            foreach (var tx in txs)
+                tx.Acknowledged = true;
         }
     }
 }

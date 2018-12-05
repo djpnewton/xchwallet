@@ -373,25 +373,14 @@ namespace xchwallet
             return res;
         }
 
-        public override IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
+        public override IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address)
         {
             var txs = new List<EthTransaction>();
-            if (wd.Accounts.ContainsKey(tag))
-                foreach (var acct in wd.Accounts[tag])
-                    if (wd.Txs.ContainsKey(acct.Address))
-                        foreach (var tx in wd.Txs[acct.Address])
-                            if (!tx.Acknowledged)
-                                txs.Add(tx);
+            if (wd.Txs.ContainsKey(address))
+                foreach (var tx in wd.Txs[address])
+                    if (!tx.Acknowledged)
+                        txs.Add(tx);
             return txs;
-        }
-
-        public override void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
-        {
-            foreach (var tx in txs)
-            {
-                System.Diagnostics.Debug.Assert(tx is BaseTransaction);
-                ((BaseTransaction)tx).Acknowledged = true;
-            }
         }
     }
 }
