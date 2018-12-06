@@ -22,8 +22,8 @@ namespace xchwallet
 
     public class BtcTransaction : BaseTransaction
     {
-        public BtcTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, from, to, direction, amount, fee, confirmations)
+        public BtcTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
+            base(id, date, from, to, direction, amount, fee, confirmations)
         {}
     }
 
@@ -134,7 +134,8 @@ namespace xchwallet
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
             var id = utxo.Outpoint.Hash;
-            var tx = new BtcTransaction(id.ToString(), "", to.ToString(), WalletDirection.Incomming, utxo.Value.Satoshi, -1, utxo.Confirmations);
+            var date = utxo.Timestamp.ToUnixTimeSeconds();
+            var tx = new BtcTransaction(id.ToString(), date, "", to.ToString(), WalletDirection.Incomming, utxo.Value.Satoshi, -1, utxo.Confirmations);
             List<BtcTransaction> txs = null;
             if (wd.Txs.ContainsKey(tx.To))
                 txs = wd.Txs[tx.To];
@@ -233,7 +234,8 @@ namespace xchwallet
             if (!wd.Txs.ContainsKey(from))
                 wd.Txs[from] = new List<BtcTransaction>();
             logger.LogDebug("amount: {0}, fee: {1}", amount, fee);
-            wd.Txs[from].Add(new BtcTransaction(txid, from, to, WalletDirection.Outgoing,
+            var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            wd.Txs[from].Add(new BtcTransaction(txid, date, from, to, WalletDirection.Outgoing,
                 amount, fee, 0));
         }
 

@@ -29,8 +29,8 @@ namespace xchwallet
 
     public class EthTransaction : BaseTransaction
     {
-        public EthTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, from, to, direction, amount, fee, confirmations)
+        public EthTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
+            base(id, date, from, to, direction, amount, fee, confirmations)
         {}
     }
 
@@ -144,13 +144,15 @@ namespace xchwallet
             public string to;
             public string value;
             public long block_num;
-            public scantx(string txid, string from_, string to, string value, long blockNum)
+            public long date;
+            public scantx(string txid, string from_, string to, string value, long blockNum, long date)
             {
                 this.txid = txid;
                 this.from_ = from_;
                 this.to = to;
                 this.value = value;
                 this.block_num = blockNum;
+                this.date = date;
             }
         }
 
@@ -166,7 +168,7 @@ namespace xchwallet
                 long confirmations = 0;
                 if (scantx.block_num > 0)
                     confirmations = blockNum - scantx.block_num;
-                var tx = new EthTransaction(scantx.txid, scantx.from_, address, WalletDirection.Incomming,
+                var tx = new EthTransaction(scantx.txid, scantx.date, scantx.from_, address, WalletDirection.Incomming,
                     BigInteger.Parse(scantx.value), -1, confirmations);
                 List<EthTransaction> txs = null;
 
@@ -295,9 +297,10 @@ namespace xchwallet
             var tx = new Transaction(signedTx.HexToByteArray());
             if (!wd.Txs.ContainsKey(from))
                 wd.Txs[from] = new List<EthTransaction>();
+            var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
-            wd.Txs[from].Add(new EthTransaction(tx.Hash.ToHex(true), from, tx.ReceiveAddress.ToHex(true), WalletDirection.Outgoing,
+            wd.Txs[from].Add(new EthTransaction(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), WalletDirection.Outgoing,
                 amount, fee, 0));
         }
 

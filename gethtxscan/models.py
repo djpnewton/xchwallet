@@ -16,6 +16,7 @@ class TransactionSchema(Schema):
     to = fields.String()
     value = fields.String()
     block_num = fields.Integer()
+    date = fields.Integer()
 
     @pre_dump
     def hexify_txid(self, obj):
@@ -58,9 +59,10 @@ class Transaction(Base):
     def __repr__(self):
         return '<Transaction %r>' % (self.txid)
 
-    def to_json(self, block_num=None):
-        if block_num:
-            self.block_num = block_num
+    def to_json(self, block=None):
+        if block:
+            self.block_num = block.num
+            self.date = int(block.date)
         tx_schema = TransactionSchema()
         return tx_schema.dump(self).data
 
@@ -194,18 +196,18 @@ class Block(Base):
         return session.query(cls).filter(cls.hash == hash).first()
 
     @classmethod
-    def tx_block_num(cls, session, tx_block_id):
+    def tx_block(cls, session, tx_block_id):
         if tx_block_id:
             block = session.query(cls).filter(cls.id == tx_block_id).first()
             if block:
-                return block.num 
-        return -1
+                return block
+        return None
 
     @classmethod
     def tx_confirmations(cls, session, current_block_num, tx_block_id):
-        block_num = cls.tx_block_num(session, tx_block_id)
-        if block_num != -1:
-                return current_block_num - block_num 
+        block = cls.tx_block(session, tx_block_id)
+        if block:
+                return current_block_num - block.num 
         return 0
 
     def __repr__(self):

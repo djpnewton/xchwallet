@@ -20,8 +20,8 @@ namespace xchwallet
 
     public class WavTransaction : BaseTransaction
     {
-        public WavTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, from, to, direction, amount, fee, confirmations)
+        public WavTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
+            base(id, date, from, to, direction, amount, fee, confirmations)
         {}
     }
 
@@ -146,6 +146,7 @@ namespace xchwallet
                         {
                             WavTransaction tx = null;
                             var id = trans.GenerateId();
+                            var date = ((DateTimeOffset)trans.Timestamp).ToUnixTimeSeconds();
 
                             // skip any txs we have already processed
                             if (processedTxs.ContainsKey(id))
@@ -158,14 +159,14 @@ namespace xchwallet
                             {
                                 // special case we are recipient and sender
                                 if (trans.Sender == address)
-                                    tx = new WavTransaction(id, address, address,
+                                    tx = new WavTransaction(id, date, address, address,
                                         WalletDirection.Outgoing, 0, fee, confs);
                                 else
-                                    tx = new WavTransaction(id, trans.Sender, address,
+                                    tx = new WavTransaction(id, date, trans.Sender, address,
                                         WalletDirection.Incomming, amount, fee, confs);
                             }
                             else
-                                tx = new WavTransaction(id, trans.Sender, trans.Recipient,
+                                tx = new WavTransaction(id, date, trans.Sender, trans.Recipient,
                                     WalletDirection.Outgoing, amount, fee, confs);
 
                             List<WavTransaction> txs = null;
@@ -303,11 +304,12 @@ namespace xchwallet
         {
             if (!wd.Txs.ContainsKey(from))
                 wd.Txs[from] = new List<WavTransaction>();
+            var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var fee = Assets.WAVES.AmountToLong(signedTx.Fee);
             var amount = Assets.WAVES.AmountToLong(signedTx.Amount);
             if (from == signedTx.Recipient) // special case if we send to ourselves
                 amount = 0;
-            wd.Txs[from].Add(new WavTransaction(signedTx.GenerateId(), from, signedTx.Recipient, WalletDirection.Outgoing,
+            wd.Txs[from].Add(new WavTransaction(signedTx.GenerateId(), date, from, signedTx.Recipient, WalletDirection.Outgoing,
                 amount, fee, 0));
         }
 

@@ -43,6 +43,7 @@ namespace xchwallet
     public interface ITransaction
     {
         string Id { get; }
+        long Date { get; }
         string From { get; }
         string To { get; }
         WalletDirection Direction { get; }
@@ -105,6 +106,7 @@ namespace xchwallet
     public class BaseTransaction : ITransaction
     {
         public string Id { get; }
+        public long Date { get; }
         public string From { get; }
         public string To { get; }
         public WalletDirection Direction { get; }
@@ -113,9 +115,10 @@ namespace xchwallet
         public long Confirmations { get; }
         public bool Acknowledged { get; set; }
 
-        public BaseTransaction(string id, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
+        public BaseTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
         {
             this.Id = id;
+            this.Date = date;
             this.From = from;
             this.To = to;
             this.Direction = direction;
@@ -127,7 +130,7 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"<{Id} {From} {To} {Amount} {Confirmations} {Direction}>";
+            return $"<{Id} {Date} {From} {To} {Amount} {Confirmations} {Direction}>";
         }
     }
 
