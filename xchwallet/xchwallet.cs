@@ -113,6 +113,7 @@ namespace xchwallet
         public BigInteger Amount { get; }
         public BigInteger Fee { get; }
         public long Confirmations { get; }
+        //TODO: move fields not derived from the blockchain to different structure?
         public bool Acknowledged { get; set; }
 
         public BaseTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)

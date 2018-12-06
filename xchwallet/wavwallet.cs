@@ -179,6 +179,7 @@ namespace xchwallet
                             {
                                 if (txs[i].Id == tx.Id)
                                 {
+                                    tx.Acknowledged = txs[i].Acknowledged;
                                     txs[i] = tx;
                                     replacedTx = true;
 
