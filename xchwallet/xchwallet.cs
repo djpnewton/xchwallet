@@ -45,6 +45,7 @@ namespace xchwallet
         public bool Acknowledged;
         public string Note;
         public long Id;
+        public string TagOnBehalfOf;
 
         public void SetAck(bool value)
         {
@@ -59,6 +60,11 @@ namespace xchwallet
         public void SetId(long value)
         {
             Id = value;
+        }
+        
+        public void SetTagOnBehalfOf(string value)
+        {
+            TagOnBehalfOf = value;
         }
     }
 
@@ -104,6 +110,8 @@ namespace xchwallet
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
         void AddNote(string tag, IEnumerable<string> txids, string note);
         void AddNote(string tag, string txid, string note);
+        void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf);
+        void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf);
         void SetTxWalletId(string tag, string txid, long id);
         long GetNextTxWalletId(string tag);
         bool ValidateAddress(string address);
@@ -223,6 +231,23 @@ namespace xchwallet
                 if (tx.Id == txid)
                 {
                     tx.WalletDetails.SetNote(note);
+                    break;
+                }
+        }
+
+        public void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf)
+        {
+            foreach (var tx in GetTransactions(tag))
+                if (txids.Contains(tx.Id))
+                    tx.WalletDetails.SetTagOnBehalfOf(tagOnBehalfOf);
+        }
+
+        public void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf)
+        {
+            foreach (var tx in GetTransactions(tagOnBehalfOf))
+                if (tx.Id == txid)
+                {
+                    tx.WalletDetails.SetTagOnBehalfOf(tagOnBehalfOf);
                     break;
                 }
         }
