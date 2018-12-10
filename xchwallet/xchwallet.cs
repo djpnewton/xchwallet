@@ -40,6 +40,28 @@ namespace xchwallet
         Incomming, Outgoing
     }
 
+    public class TxMetadata
+    {
+        public bool Acknowledged;
+        public string Note;
+        public long Id;
+
+        public void SetAck(bool value)
+        {
+            Acknowledged = value;
+        }
+
+        public void SetNote(string value)
+        {
+            Note = value;
+        }
+
+        public void SetId(long value)
+        {
+            Id = value;
+        }
+    }
+
     public interface ITransaction
     {
         string Id { get; }
@@ -50,7 +72,8 @@ namespace xchwallet
         BigInteger Amount { get; }
         BigInteger Fee { get; }
         long Confirmations { get; }
-        bool Acknowledged { get; set; }
+        // TODO: maybe this should be in its own stucture.. or the wallet backend should just ensure it is preserved when rescanning the blockchain
+        TxMetadata WalletDetails { get; set; }
     }
 
     public enum WalletError
@@ -79,7 +102,13 @@ namespace xchwallet
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
-        string AmountToHumanFriendly(BigInteger value);
+        void AddNote(string tag, IEnumerable<string> txids, string note);
+        void AddNote(string tag, string txid, string note);
+        void SetTxWalletId(string tag, string txid, long id);
+        long GetNextTxWalletId(string tag);
+        bool ValidateAddress(string address);
+        string AmountToString(BigInteger value);
+        BigInteger StringToAmount(string value);
 
         void Save(string filename);
     }
@@ -113,8 +142,7 @@ namespace xchwallet
         public BigInteger Amount { get; }
         public BigInteger Fee { get; }
         public long Confirmations { get; }
-        //TODO: move fields not derived from the blockchain to different structure?
-        public bool Acknowledged { get; set; }
+        public TxMetadata WalletDetails { get; set; }
 
         public BaseTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
         {
@@ -126,7 +154,7 @@ namespace xchwallet
             this.Amount = amount;
             this.Fee = fee;
             this.Confirmations = confirmations;
-            this.Acknowledged = false;
+            this.WalletDetails = new TxMetadata();
         }
 
         public override string ToString()
@@ -149,8 +177,10 @@ namespace xchwallet
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
-        public abstract string AmountToHumanFriendly(BigInteger value);
+        public abstract string AmountToString(BigInteger value);
+        public abstract BigInteger StringToAmount(string value);
         public abstract void Save(string filename);
+        public abstract bool ValidateAddress(string address);
 
         public IAddress NewOrUnusedAddress(string tag)
         {
@@ -177,7 +207,50 @@ namespace xchwallet
         public void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
         {
             foreach (var tx in txs)
-                tx.Acknowledged = true;
+                tx.WalletDetails.SetAck(true);
+        }
+
+        public void AddNote(string tag, IEnumerable<string> txids, string note)
+        {
+            foreach (var tx in GetTransactions(tag))
+                if (txids.Contains(tx.Id))
+                    tx.WalletDetails.SetNote(note);
+        }
+
+        public void AddNote(string tag, string txid, string note)
+        {
+            foreach (var tx in GetTransactions(tag))
+                if (tx.Id == txid)
+                {
+                    tx.WalletDetails.SetNote(note);
+                    break;
+                }
+        }
+
+        public void SetTxWalletId(string tag, IEnumerable<string> txids, long id)
+        {
+            foreach (var tx in GetTransactions(tag))
+                if (txids.Contains(tx.Id))
+                    tx.WalletDetails.SetId(id);
+        }
+
+        public void SetTxWalletId(string tag, string txid, long id)
+        {
+            foreach (var tx in GetTransactions(tag))
+                if (tx.Id == txid)
+                {
+                    tx.WalletDetails.SetId(id);
+                    break;
+                }
+        }
+                
+        public long GetNextTxWalletId(string tag)
+        {
+            long res = 0;
+            foreach (var tx in GetTransactions(tag))
+                if (tx.WalletDetails.Id > res)
+                    res = tx.WalletDetails.Id;
+            return res + 1;
         }
     }
 }

@@ -182,7 +182,7 @@ namespace xchwallet
                 {
                     if (txs[i].Id == tx.Id)
                     {
-                        tx.Acknowledged = txs[i].Acknowledged;
+                        tx.WalletDetails = txs[i].WalletDetails;
                         txs[i] = tx;
                         replacedTx = true;
                         break;
@@ -387,16 +387,28 @@ namespace xchwallet
             var txs = new List<EthTransaction>();
             if (wd.Txs.ContainsKey(address))
                 foreach (var tx in wd.Txs[address])
-                    if (!tx.Acknowledged)
+                    if (!tx.WalletDetails.Acknowledged)
                         txs.Add(tx);
             return txs;
         }
 
-        public override string AmountToHumanFriendly(BigInteger value)
+        public override bool ValidateAddress(string address)
+        {
+            throw new Exception("not yet implemented");
+        }
+
+        public override string AmountToString(BigInteger value)
         {
             var _scale = new decimal(1, 0, 0, false, 18);
             var d = (decimal)value * _scale;
             return d.ToString();
+        }
+
+        public override BigInteger StringToAmount(string value)
+        {
+            var _scale = new decimal(1, 0, 0, false, 18);
+            var d = decimal.Parse(value) / _scale;
+            return (BigInteger)d;
         }
     }
 }

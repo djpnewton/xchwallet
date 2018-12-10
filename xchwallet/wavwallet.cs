@@ -179,7 +179,7 @@ namespace xchwallet
                             {
                                 if (txs[i].Id == tx.Id)
                                 {
-                                    tx.Acknowledged = txs[i].Acknowledged;
+                                    tx.WalletDetails = txs[i].WalletDetails;
                                     txs[i] = tx;
                                     replacedTx = true;
 
@@ -388,14 +388,35 @@ namespace xchwallet
             var txs = new List<WavTransaction>();
             if (wd.Txs.ContainsKey(address))
                 foreach (var tx in wd.Txs[address])
-                    if (!tx.Acknowledged)
+                    if (!tx.WalletDetails.Acknowledged)
                         txs.Add(tx);
             return txs;
         }
 
-        public override string AmountToHumanFriendly(BigInteger value)
+        public override bool ValidateAddress(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address))
+                return false;
+            var data = Base58.Decode(address);
+            if (data.Length != 26)
+                return false;
+            if (data[0] != 1)
+                return false;
+            if (data[1] != ChainId())
+                return false;
+            return true;
+        }
+
+        public override string AmountToString(BigInteger value)
         {
             return Assets.WAVES.BigIntToAmount(value).ToString();
+        }
+
+        public override BigInteger StringToAmount(string value)
+        {
+            var _scale = new decimal(1, 0, 0, false, Assets.WAVES.Decimals);
+            var d = decimal.Parse(value) / _scale;
+            return (BigInteger)d;
         }
     }
 
