@@ -106,12 +106,14 @@ namespace xchwallet
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
+        IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
         void AddNote(string tag, IEnumerable<string> txids, string note);
         void AddNote(string tag, string txid, string note);
         void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf);
         void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf);
+        void SetTxWalletId(string tag, IEnumerable<string> txids, long id);
         void SetTxWalletId(string tag, string txid, long id);
         long GetNextTxWalletId(string tag);
         bool ValidateAddress(string address);
