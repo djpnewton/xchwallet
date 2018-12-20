@@ -50,3 +50,5 @@
 - include: gethtxscan.yml
 - include: dotnetcore.yml
 - include: nbxplorer.yml
+- include: java.yml
+- include: waves.yml
