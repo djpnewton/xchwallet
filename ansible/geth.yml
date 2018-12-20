@@ -5,7 +5,9 @@
   become_user: root
 
   vars:
-    gethrelease: geth-linux-amd64-1.8.1-1e67410e
+    version: 1.8.20
+    commit: 24d727b6
+    gethrelease: geth-linux-amd64-{{version}}-{{commit}}
   tasks:
     - name: ansible group
       group: 

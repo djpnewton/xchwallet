@@ -5,7 +5,9 @@
   become_user: root
 
   vars:
-    bitcoinfile: bitcoin-0.16.0-x86_64-linux-gnu.tar.gz
+    version_without_build: 0.17.0
+    version: "{{version_without_build}}.1"
+    bitcoinfile: bitcoin-{{version}}-x86_64-linux-gnu.tar.gz
   tasks:
     - name: bitcoind group
       group: 
@@ -22,14 +24,14 @@
 
     - name: download and unpack bitcoind
       unarchive:
-        src: https://bitcoin.org/bin/bitcoin-core-0.16.0/{{ bitcoinfile }}
+        src: https://bitcoincore.org/bin/bitcoin-core-{{version}}/{{bitcoinfile}}
         dest: /home/bitcoin/
         remote_src: yes
-        creates: /home/bitcoin/bitcoin-0.16.0
+        creates: /home/bitcoin/bitcoin-{{version}}
 
     - name: copy bitcoin-cli binary
       copy:
-        src: /home/bitcoin/bitcoin-0.16.0/bin/bitcoin-cli
+        src: /home/bitcoin/bitcoin-{{version_without_build}}/bin/bitcoin-cli
         dest: /usr/local/bin/bitcoin-cli
         remote_src: yes
         owner: bitcoin
@@ -38,7 +40,7 @@
 
     - name: copy bitcoind binary
       copy:
-        src: /home/bitcoin/bitcoin-0.16.0/bin/bitcoind
+        src: /home/bitcoin/bitcoin-{{version_without_build}}/bin/bitcoind
         dest: /usr/local/bin/bitcoind
         remote_src: yes
         owner: bitcoin
