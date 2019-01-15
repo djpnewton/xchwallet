@@ -30,6 +30,6 @@
 
     - name: .NET | Install dotnet core SDK
       package:
-        name: "dotnet-sdk-2.1.4"
+        name: "dotnet-sdk-2.2"
         state: present
         update_cache: true
