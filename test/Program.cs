@@ -7,6 +7,7 @@ using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using xchwallet;
 
 namespace test
@@ -98,6 +99,11 @@ namespace test
 
             [Option('t', "tag", Required = true, HelpText = "Wallet tag")]
             public string Tag { get; set; }
+        }
+
+        [Verb("dbtest", HelpText = "Test db stuff")]
+        class DbTestOptions
+        { 
         }
 
         static ILogger _logger = null;
@@ -293,9 +299,52 @@ namespace test
             return 0;
         }
 
+        static int RunDbTestAndReturnExitCode(DbTestOptions opts)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
+            optionsBuilder.UseSqlite("Data Source=wallet.db");
+            using (var db = new WalletContext(optionsBuilder.Options))
+            {
+                Console.WriteLine(db);
+
+                var addr = db.WalletAddrs.FirstOrDefault();
+                if (addr == null)
+                {
+                    addr = new WalletAddr("test", null, "xxxaddrxxx");
+                    db.WalletAddrs.Add(addr);
+                }
+
+                var tx = new ChainTx { TxId="test", Amount = DateTime.UtcNow.Millisecond, Fee = 1 };
+                var walletTx = new WalletTx { Direction = WalletDirection.Incomming, Address = addr, ChainTx = tx };
+                db.ChainTxs.Add(tx);
+                db.WalletTxs.Add(walletTx);
+
+                var count = db.SaveChanges();
+                Console.WriteLine("{0} records saved", count);
+
+                Console.WriteLine();
+                Console.WriteLine("All Transactions in database:");
+                BigInteger total = 0;
+                foreach (var _tx in db.ChainTxs)
+                {
+                    Console.WriteLine(" - {0}", _tx);
+                    total += _tx.Amount;
+                }
+                Console.WriteLine($"Total: {total}");
+
+                Console.WriteLine("All Wallet Transactions in database:");
+                foreach (var _tx in db.WalletTxs)
+                {
+                    Console.WriteLine(" - {0}", _tx);
+                }
+            }
+
+            return 0;
+        }
+
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DbTestOptions>(args)
                 .MapResult(
                 (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
                 (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
@@ -306,6 +355,7 @@ namespace test
                 (ConsolidateOptions opts) => RunConsolidateAndReturnExitCode(opts),
                 (ShowUnAckOptions opts) => RunShowUnAckAndReturnExitCode(opts),
                 (AckOptions opts) => RunAckAndReturnExitCode(opts),
+                (DbTestOptions opts) => RunDbTestAndReturnExitCode(opts),
                 errs => 1);
         }
     }
