@@ -11,46 +11,20 @@ using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
-    using Addrs = Dictionary<string, List<BtcAddress>>;
-    using AddrTxs = Dictionary<string, List<BtcTransaction>>;
-
-    public class BtcAddress : BaseAddress
-    {
-        public BtcAddress(string tag, string path, string address) : base(tag, path, address)
-        {}
-    }
-
-    public class BtcTransaction : BaseTransaction
-    {
-        public BtcTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, date, from, to, direction, amount, fee, confirmations)
-        {}
-    }
-
     public class BtcWallet : BaseWallet
     {
         public const string TYPE = "BTC";
-        struct WalletData
-        {
-            public string Type;
-            public Addrs Addresses;
-            public AddrTxs Txs;
-        }
 
         readonly BitcoinExtKey key = null;
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
-        WalletData wd = new WalletData{Addresses = new Addrs(), Txs = new AddrTxs()};
         ILogger logger;
 
-        public BtcWallet(ILogger logger, string seedHex, string filename, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false)
+        public BtcWallet(ILogger logger, string seedHex, WalletContext db, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(db)
         {
             this.logger = logger;
 
-            // load saved data
-            if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
-                wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
             // create extended key
             key = new BitcoinExtKey(new ExtKey(seedHex), network);
             var strpubkey = $"{key.Neuter().ToString()}";
@@ -67,15 +41,6 @@ namespace xchwallet
                 throw new Exception("unsupported network");
             client = new ExplorerClient(nbxnetwork, nbxplorerAddress);
             client.Track(pubkey);
-            UpdateTxs();
-        }
-
-        public override void Save(string filename)
-        {
-            wd.Type = TYPE;
-            // save data
-            if (!string.IsNullOrWhiteSpace(filename))  
-                File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
         public override string Type()
@@ -88,40 +53,16 @@ namespace xchwallet
             return client.Network.NBitcoinNetwork == Network.Main;
         }
 
-        public override IEnumerable<string> GetTags()
-        {
-            return wd.Addresses.Keys;
-        }
-
-        void AddAddress(string tag, BtcAddress address)
-        {
-            // add to address list
-            if (wd.Addresses.ContainsKey(tag))
-                wd.Addresses[tag].Add(address);
-            else
-            {
-                var list = new List<BtcAddress>();
-                list.Add(address);
-                wd.Addresses[tag] = list;
-            }
-        }
-
-        public override IAddress NewAddress(string tag)
+        public override WalletAddr NewAddress(string tag)
         {
             // create new address that is unused
+            var _tag = db.TagGetOrCreate(tag);
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
             var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-            var address = new BtcAddress(tag, keypathInfo.KeyPath.ToString(), addr.ToString());
+            var address = new WalletAddr(_tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             // add to address list
-            AddAddress(tag, address);
+            db.WalletAddrs.Add(address);
             return address;
-        }
-
-        public override IEnumerable<IAddress> GetAddresses(string tag)
-        {
-            if (wd.Addresses.ContainsKey(tag))
-                return wd.Addresses[tag];
-            return new List<IAddress>();
         }
 
         private BitcoinAddress AddressOf(ExtPubKey pubkey, KeyPath path)
@@ -133,28 +74,34 @@ namespace xchwallet
         {
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-            var id = utxo.Outpoint.Hash;
+            var id = utxo.Outpoint.Hash.ToString();
             var date = utxo.Timestamp.ToUnixTimeSeconds();
-            var tx = new BtcTransaction(id.ToString(), date, "", to.ToString(), WalletDirection.Incomming, utxo.Value.Satoshi, -1, utxo.Confirmations);
-            List<BtcTransaction> txs = null;
-            if (wd.Txs.ContainsKey(tx.To))
-                txs = wd.Txs[tx.To];
-            else
-                txs = new List<BtcTransaction>();
-            bool replacedTx = false;
-            for (var i = 0; i < txs.Count; i++)
+
+            var address = db.AddrGet(to.ToString());
+
+            var ctx = db.ChainTxGet(id);
+            if (ctx == null)
             {
-                if (txs[i].Id == tx.Id)
-                {
-                    tx.WalletDetails = txs[i].WalletDetails;
-                    txs[i] = tx;
-                    replacedTx = true;
-                    break;
-                }
+                ctx = new ChainTx(id, date, "", to.ToString(),
+                    utxo.Value.Satoshi, -1, utxo.Confirmations);
+                db.ChainTxs.Add(ctx);
             }
-            if (!replacedTx)
-                txs.Add(tx);
-            wd.Txs[tx.To] = txs;
+            else
+            {
+                ctx.Confirmations = utxo.Confirmations;
+                db.ChainTxs.Update(ctx);
+            }
+            var wtx = db.TxGet(ctx);
+            if (wtx == null)
+            {
+                wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
+                db.WalletTxs.Add(wtx);
+            }
+        }
+
+        public override void UpdateFromBlockchain()
+        {
+            UpdateTxs();
         }
 
         private void UpdateTxs()
@@ -166,57 +113,45 @@ namespace xchwallet
                 processUtxo(item);
         }
 
-        void AddTxs(List<ITransaction> txs, string address)
+        public override IEnumerable<WalletTx> GetTransactions(string tag)
         {
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    txs.Add(tx);
+            return db.TxsGet(tag);
         }
 
-        public override IEnumerable<ITransaction> GetTransactions(string tag)
+        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
-            UpdateTxs();
-            var txs = new List<ITransaction>(); 
-            if (wd.Addresses.ContainsKey(tag))
-                foreach (var item in wd.Addresses[tag])
-                    AddTxs(txs, item.Address);
-            return txs;
-        }
-
-        public override IEnumerable<ITransaction> GetAddrTransactions(string address)
-        {
-            UpdateTxs();
-            if (wd.Txs.ContainsKey(address))
-                return wd.Txs[address];
-            return new List<ITransaction>(); 
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return addr.Txs;
         }
 
         public override BigInteger GetBalance(string tag)
         {
-            UpdateTxs();
-            if (wd.Addresses.ContainsKey(tag))
-            {
-                BigInteger total = 0;
-                foreach (var item in wd.Addresses[tag])
-                    if (wd.Txs.ContainsKey(item.Address))
-                        foreach (var tx in wd.Txs[item.Address])
-                            total += tx.Amount;
-                return total;
-            }
-            return 0;
+            BigInteger total = 0;
+            foreach (var addr in db.AddrsGet(tag))
+                total += GetAddrBalance(addr);
+            return total;
         }
 
         public override BigInteger GetAddrBalance(string address)
         {
-            UpdateTxs();
-            if (wd.Txs.ContainsKey(address))
-            {
-                BigInteger total = 0;
-                foreach (var tx in wd.Txs[address])
-                    total += tx.Amount;
-                return total;
-            }
-            return 0;
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return GetAddrBalance(addr);
+        }
+
+        public BigInteger GetAddrBalance(WalletAddr addr)
+        {
+            BigInteger total = 0;
+            foreach (var tx in addr.Txs)
+                if (tx.Direction == WalletDirection.Incomming)
+                    total += tx.ChainTx.Amount;
+                else if (tx.Direction == WalletDirection.Outgoing)
+                {
+                    total -= tx.ChainTx.Amount;
+                    total -= tx.ChainTx.Fee;
+                }
+            return total;
         }
 
         public BitcoinAddress AddChangeAddress(string tag)
@@ -224,20 +159,21 @@ namespace xchwallet
             // create new address that is unused
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Change, reserve: false);
             var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-            var address = new BtcAddress(tag, keypathInfo.KeyPath.ToString(), addr.ToString());
+            var address = new WalletAddr(db.TagGetOrCreate(tag), keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             // add to address list
-            AddAddress(tag, address);
+            db.WalletAddrs.Add(address);
             return addr;
         }
 
         void AddOutgoingTx(string txid, string from, string to, BigInteger amount, BigInteger fee)
         {
-            if (!wd.Txs.ContainsKey(from))
-                wd.Txs[from] = new List<BtcTransaction>();
-            logger.LogDebug("amount: {0}, fee: {1}", amount, fee);
+            logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            wd.Txs[from].Add(new BtcTransaction(txid, date, from, to, WalletDirection.Outgoing,
-                amount, fee, 0));
+            var address = db.AddrGet(from);
+            var ctx = new ChainTx(txid, date, from, to, amount, fee, 0);
+            db.ChainTxs.Add(ctx);
+            var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
+            db.WalletTxs.Add(wtx);
         }
 
         FeeRate GetFeeRate(Transaction tx, List<Key> toBeSpentKeys, List<Coin> toBeSpent)
@@ -403,16 +339,6 @@ namespace xchwallet
                 logger.LogError("{0}, {1}, {2}", result.RPCCode, result.RPCCodeMessage, result.RPCMessage);
                 return WalletError.FailedBroadcast;
             }
-        }
-
-        public override IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address)
-        {
-            var txs = new List<BtcTransaction>();
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    if (!tx.WalletDetails.Acknowledged)
-                        txs.Add(tx);
-            return txs;
         }
 
         public override bool ValidateAddress(string address)

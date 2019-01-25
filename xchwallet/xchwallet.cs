@@ -1,85 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Numerics;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using Newtonsoft.Json;
 
 namespace xchwallet
 {
     public static class Util
     {
-        struct WalletType
+        public const string TYPE_KEY = "Type";
+
+        public static string GetWalletType(WalletContext db)
         {
-            public string Type;
-            public WalletType(string type)
-            {
-                this.Type = type;
-            }
-        }
-        public static string GetWalletType(string filename)
-        {
-            if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
-            {
-                var wt = JsonConvert.DeserializeObject<WalletType>(File.ReadAllText(filename));
-                return wt.Type;
-            }
+            var type = db.CfgGet(TYPE_KEY);
+            if (type != null)
+                return type.Value;
             return null;
         }
-    }
-
-    public interface IAddress
-    {
-        string Tag { get; }
-        string Path { get; }
-        string Address { get; }
     }
 
     public enum WalletDirection
     {
         Incomming, Outgoing
-    }
-
-    public class TxMetadata
-    {
-        public bool Acknowledged;
-        public string Note;
-        public long Id;
-        public string TagOnBehalfOf;
-
-        public void SetAck(bool value)
-        {
-            Acknowledged = value;
-        }
-
-        public void SetNote(string value)
-        {
-            Note = value;
-        }
-
-        public void SetId(long value)
-        {
-            Id = value;
-        }
-        
-        public void SetTagOnBehalfOf(string value)
-        {
-            TagOnBehalfOf = value;
-        }
-    }
-
-    public interface ITransaction
-    {
-        string Id { get; }
-        long Date { get; }
-        string From { get; }
-        string To { get; }
-        WalletDirection Direction { get; }
-        BigInteger Amount { get; }
-        BigInteger Fee { get; }
-        long Confirmations { get; }
-        // TODO: maybe this should be in its own stucture.. or the wallet backend should just ensure it is preserved when rescanning the blockchain
-        TxMetadata WalletDetails { get; set; }
     }
 
     public enum WalletError
@@ -95,20 +38,21 @@ namespace xchwallet
     {
         string Type();
         bool IsMainnet();
-        IEnumerable<string> GetTags();
-        IAddress NewAddress(string tag);
-        IAddress NewOrUnusedAddress(string tag);
-        IEnumerable<IAddress> GetAddresses(string tag);
-        IEnumerable<ITransaction> GetTransactions(string tag);
-        IEnumerable<ITransaction> GetAddrTransactions(string address);
+        IEnumerable<WalletTag> GetTags();
+        WalletAddr NewAddress(string tag);
+        WalletAddr NewOrUnusedAddress(string tag);
+        void UpdateFromBlockchain();
+        IEnumerable<WalletAddr> GetAddresses(string tag);
+        IEnumerable<WalletTx> GetTransactions(string tag);
+        IEnumerable<WalletTx> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
-        IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
-        IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag);
-        void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs);
+        IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
+        IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
+        void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
         void AddNote(string tag, IEnumerable<string> txids, string note);
         void AddNote(string tag, string txid, string note);
         void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf);
@@ -120,79 +64,55 @@ namespace xchwallet
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
 
-        void Save(string filename);
-    }
-
-    public class BaseAddress : IAddress
-    {
-        public string Tag { get; }
-        public string Path { get; }
-        public string Address { get; }
-
-        public BaseAddress(string tag, string path, string address)
-        {
-            this.Tag = tag;
-            this.Path = path;
-            this.Address = address;
-        }
-
-        public override string ToString()
-        {
-            return $"'{Tag}' - {Path} - {Address}";
-        }
-    }
-
-    public class BaseTransaction : ITransaction
-    {
-        public string Id { get; }
-        public long Date { get; }
-        public string From { get; }
-        public string To { get; }
-        public WalletDirection Direction { get; }
-        public BigInteger Amount { get; }
-        public BigInteger Fee { get; }
-        public long Confirmations { get; }
-        public TxMetadata WalletDetails { get; set; }
-
-        public BaseTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations)
-        {
-            this.Id = id;
-            this.Date = date;
-            this.From = from;
-            this.To = to;
-            this.Direction = direction;
-            this.Amount = amount;
-            this.Fee = fee;
-            this.Confirmations = confirmations;
-            this.WalletDetails = new TxMetadata();
-        }
-
-        public override string ToString()
-        {
-            return $"<{Id} {Date} {From} {To} {Amount} {Confirmations} {Direction}>";
-        }
+        void Save();
     }
 
     public abstract class BaseWallet : IWallet
     {
         public abstract string Type();
         public abstract bool IsMainnet();
-        public abstract IEnumerable<string> GetTags();
-        public abstract IAddress NewAddress(string tag);
-        public abstract IEnumerable<IAddress> GetAddresses(string tag);
-        public abstract IEnumerable<ITransaction> GetTransactions(string tag);
-        public abstract IEnumerable<ITransaction> GetAddrTransactions(string address);
+        public abstract WalletAddr NewAddress(string tag);
+        public abstract void UpdateFromBlockchain();
+        public abstract IEnumerable<WalletTx> GetTransactions(string tag);
+        public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag);
         public abstract BigInteger GetAddrBalance(string address);
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
-        public abstract IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address);
         public abstract string AmountToString(BigInteger value);
         public abstract BigInteger StringToAmount(string value);
-        public abstract void Save(string filename);
         public abstract bool ValidateAddress(string address);
 
-        public IAddress NewOrUnusedAddress(string tag)
+        protected WalletContext db = null;
+
+        void CheckType()
+        {
+            var type = db.CfgGet(Util.TYPE_KEY);
+            if (type == null)
+                // newly initialised wallet
+                return;
+            if (type.Value != Type())
+                throw new Exception($"Type found in db ({type.Value}) does not match this wallet class ({Type()})");
+        }
+
+        public BaseWallet(WalletContext db)
+        {
+            this.db = db;
+            CheckType();
+        }
+
+        public void Save()
+        {
+            db.CfgSet(Util.TYPE_KEY, Type());
+            db.SaveChanges();
+        }
+
+        public IEnumerable<WalletTag> GetTags()
+        {
+            return db.WalletTags;
+        }
+
+        public WalletAddr NewOrUnusedAddress(string tag)
         {
             foreach (var addr in GetAddresses(tag))
             {
@@ -203,9 +123,19 @@ namespace xchwallet
             return NewAddress(tag);
         }
 
-        public IEnumerable<ITransaction> GetUnacknowledgedTransactions(string tag)
+        public IEnumerable<WalletAddr> GetAddresses(string tag)
         {
-            var txs = new List<ITransaction>();
+            return db.AddrsGet(tag);
+        }
+
+        public IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address)
+        {
+            return db.TxsUnAckedGet(address);
+        }
+        
+        public IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag)
+        {
+            var txs = new List<WalletTx>();
             foreach (var addr in GetAddresses(tag))
             {
                 var addrTxs = GetAddrUnacknowledgedTransactions(addr.Address);
@@ -214,25 +144,30 @@ namespace xchwallet
             return txs;
         }
 
-        public void AcknowledgeTransactions(string tag, IEnumerable<ITransaction> txs)
+        public void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs)
         {
             foreach (var tx in txs)
-                tx.WalletDetails.SetAck(true);
+                tx.Acknowledged = true;
+            db.WalletTxs.UpdateRange(txs);
         }
 
         public void AddNote(string tag, IEnumerable<string> txids, string note)
         {
             foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.Id))
-                    tx.WalletDetails.SetNote(note);
+                if (txids.Contains(tx.ChainTx.TxId))
+                {
+                    tx.Note = note;
+                    db.WalletTxs.Update(tx);
+                }
         }
 
         public void AddNote(string tag, string txid, string note)
         {
             foreach (var tx in GetTransactions(tag))
-                if (tx.Id == txid)
+                if (tx.ChainTx.TxId == txid)
                 {
-                    tx.WalletDetails.SetNote(note);
+                    tx.Note = note;
+                    db.WalletTxs.Update(tx);
                     break;
                 }
         }
@@ -240,16 +175,20 @@ namespace xchwallet
         public void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf)
         {
             foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.Id))
-                    tx.WalletDetails.SetTagOnBehalfOf(tagOnBehalfOf);
+                if (txids.Contains(tx.ChainTx.TxId))
+                {
+                    tx.TagOnBehalfOf = tagOnBehalfOf;
+                    db.WalletTxs.Update(tx);
+                }
         }
 
         public void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf)
         {
             foreach (var tx in GetTransactions(tagOnBehalfOf))
-                if (tx.Id == txid)
+                if (tx.ChainTx.TxId == txid)
                 {
-                    tx.WalletDetails.SetTagOnBehalfOf(tagOnBehalfOf);
+                    tx.TagOnBehalfOf = tagOnBehalfOf;
+                    db.WalletTxs.Update(tx);
                     break;
                 }
         }
@@ -257,16 +196,20 @@ namespace xchwallet
         public void SetTxWalletId(string tag, IEnumerable<string> txids, long id)
         {
             foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.Id))
-                    tx.WalletDetails.SetId(id);
+                if (txids.Contains(tx.ChainTx.TxId))
+                {
+                    tx.WalletId = id;
+                    db.WalletTxs.Update(tx);
+                }
         }
 
         public void SetTxWalletId(string tag, string txid, long id)
         {
             foreach (var tx in GetTransactions(tag))
-                if (tx.Id == txid)
+                if (tx.ChainTx.TxId == txid)
                 {
-                    tx.WalletDetails.SetId(id);
+                    tx.WalletId = id;
+                    db.WalletTxs.Update(tx);
                     break;
                 }
         }
@@ -275,8 +218,8 @@ namespace xchwallet
         {
             long res = 0;
             foreach (var tx in GetTransactions(tag))
-                if (tx.WalletDetails.Id > res)
-                    res = tx.WalletDetails.Id;
+                if (tx.WalletId > res)
+                    res = tx.WalletId;
             return res + 1;
         }
     }

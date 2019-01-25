@@ -101,11 +101,6 @@ namespace test
             public string Tag { get; set; }
         }
 
-        [Verb("dbtest", HelpText = "Test db stuff")]
-        class DbTestOptions
-        { 
-        }
-
         static ILogger _logger = null;
         static ILogger GetLogger()
         {
@@ -119,24 +114,38 @@ namespace test
 
         static void PrintWallet(IWallet wallet)
         {
-            var tags = wallet.GetTags();
-            foreach (var tag in tags)
+            wallet.UpdateFromBlockchain();
+
+            foreach (var tag in wallet.GetTags())
             {
-                Console.WriteLine($"{tag}:");
-                var addrs = wallet.GetAddresses(tag);
+                Console.WriteLine($"{tag.Tag}:");
+                var addrs = tag.Addrs;
                 if (!addrs.Any())
-                    wallet.NewAddress(tag);
+                    wallet.NewAddress(tag.Tag);
                 Console.WriteLine("  addrs:");
-                addrs = wallet.GetAddresses(tag);
+                addrs = tag.Addrs;
                 foreach (var addr in addrs)
                     Console.WriteLine($"    {addr.Address}");
                 Console.WriteLine("  txs:");
-                var txs = wallet.GetTransactions(tag);
+                var txs = wallet.GetTransactions(tag.Tag);
                 foreach (var tx in txs)
                     Console.WriteLine($"    {tx}");
-                var balance = wallet.GetBalance(tag);
+                var balance = wallet.GetBalance(tag.Tag);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             }
+        }
+
+        static WalletContext CreateWalletContext(string filename)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
+            optionsBuilder.UseSqlite($"Data Source={filename}");
+            return new WalletContext(optionsBuilder.Options);
+        }
+
+        static string GetWalletType(string filename)
+        {
+            using (var db = CreateWalletContext(filename))
+                return Util.GetWalletType(db);
         }
 
         static IWallet CreateWallet(string filename, string walletType)
@@ -144,39 +153,40 @@ namespace test
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
             const string seed = "12345678901234567890123456789012";
+            var db = CreateWalletContext(filename);
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), seed, filename, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
+                return new BtcWallet(GetLogger(), seed, db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
-                return new EthWallet(GetLogger(), seed, filename, false, "https://ropsten.infura.io", "http://localhost:5001");
+                return new EthWallet(GetLogger(), seed, db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
-                return new WavWallet(GetLogger(), seed, filename, false, new Uri("https://testnodes.wavesnodes.com"));
+                return new WavWallet(GetLogger(), seed, db, false, new Uri("https://testnodes.wavesnodes.com"));
             return null;
         }
 
         static int RunNewBtcWalletAndReturnExitCode(NewBtcWalletOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, BtcWallet.TYPE);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunNewEthWalletAndReturnExitCode(NewEthWalletOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, EthWallet.TYPE);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunNewWavWalletAndReturnExitCode(NewWavWalletOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, WavWallet.TYPE);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunShowAndReturnExitCode(ShowOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -184,13 +194,13 @@ namespace test
                 return 1;
             }
             PrintWallet(wallet);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunNewAddrAndReturnExitCode(NewAddrOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -198,7 +208,7 @@ namespace test
                 return 1;
             }
             Console.WriteLine(wallet.NewAddress(opts.Tag));
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
@@ -225,7 +235,7 @@ namespace test
 
         static int RunSpendAndReturnExitCode(SpendOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -240,13 +250,13 @@ namespace test
             Console.WriteLine(res);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunConsolidateAndReturnExitCode(ConsolidateOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -264,13 +274,13 @@ namespace test
             Console.WriteLine(res);
             foreach (var txid in txids)
                 Console.WriteLine(txid);
-            wallet.Save(opts.Filename);
+            wallet.Save();
             return 0;
         }
 
         static int RunShowUnAckAndReturnExitCode(ShowUnAckOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -284,7 +294,7 @@ namespace test
 
         static int RunAckAndReturnExitCode(AckOptions opts)
         {
-            var walletType = Util.GetWalletType(opts.Filename);
+            var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType);
             if (wallet == null)
             {
@@ -295,56 +305,13 @@ namespace test
             foreach (var tx in txs)
                 Console.WriteLine(tx);
             wallet.AcknowledgeTransactions(opts.Tag, txs);
-            wallet.Save(opts.Filename);
-            return 0;
-        }
-
-        static int RunDbTestAndReturnExitCode(DbTestOptions opts)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
-            optionsBuilder.UseSqlite("Data Source=wallet.db");
-            using (var db = new WalletContext(optionsBuilder.Options))
-            {
-                Console.WriteLine(db);
-
-                var addr = db.WalletAddrs.FirstOrDefault();
-                if (addr == null)
-                {
-                    addr = new WalletAddr("test", null, "xxxaddrxxx");
-                    db.WalletAddrs.Add(addr);
-                }
-
-                var tx = new ChainTx { TxId="test", Amount = DateTime.UtcNow.Millisecond, Fee = 1 };
-                var walletTx = new WalletTx { Direction = WalletDirection.Incomming, Address = addr, ChainTx = tx };
-                db.ChainTxs.Add(tx);
-                db.WalletTxs.Add(walletTx);
-
-                var count = db.SaveChanges();
-                Console.WriteLine("{0} records saved", count);
-
-                Console.WriteLine();
-                Console.WriteLine("All Transactions in database:");
-                BigInteger total = 0;
-                foreach (var _tx in db.ChainTxs)
-                {
-                    Console.WriteLine(" - {0}", _tx);
-                    total += _tx.Amount;
-                }
-                Console.WriteLine($"Total: {total}");
-
-                Console.WriteLine("All Wallet Transactions in database:");
-                foreach (var _tx in db.WalletTxs)
-                {
-                    Console.WriteLine(" - {0}", _tx);
-                }
-            }
-
+            wallet.Save();
             return 0;
         }
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DbTestOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
                 (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
@@ -355,7 +322,6 @@ namespace test
                 (ConsolidateOptions opts) => RunConsolidateAndReturnExitCode(opts),
                 (ShowUnAckOptions opts) => RunShowUnAckAndReturnExitCode(opts),
                 (AckOptions opts) => RunAckAndReturnExitCode(opts),
-                (DbTestOptions opts) => RunDbTestAndReturnExitCode(opts),
                 errs => 1);
         }
     }

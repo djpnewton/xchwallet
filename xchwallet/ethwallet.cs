@@ -14,36 +14,10 @@ using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
-    using Accts = Dictionary<string, List<EthAccount>>;
-    using AcctTxs = Dictionary<string, List<EthTransaction>>;
-
-    public class EthAccount : BaseAddress
-    {
-        public int PathIndex;
-
-        public EthAccount(string tag, string path, string address, int pathIndex) : base(tag, path, address)
-        {
-            this.PathIndex = pathIndex;
-        }
-    }
-
-    public class EthTransaction : BaseTransaction
-    {
-        public EthTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, date, from, to, direction, amount, fee, confirmations)
-        {}
-    }
 
     public class EthWallet : BaseWallet
     {
         public const string TYPE = "ETH";
-        struct WalletData
-        {
-            public string Type;
-            public Accts Accounts;
-            public AcctTxs Txs;
-            public int LastPathIndex;
-        }
 
         const string PATH = "m/44'/60'/0'/x";
         const int TX_GAS = 21000;
@@ -52,18 +26,14 @@ namespace xchwallet
         string gethTxScanAddress = null;
         WebClient scanClient = null;
         Wallet wallet = null;
+        bool mainNet = false;
 
-        WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AcctTxs(), LastPathIndex = 0};
-        bool mainNet;
         ILogger logger;
 
-        public EthWallet(ILogger logger, string seedHex, string filename, bool mainNet, string gethAddress, string gethTxScanAddress)
+        public EthWallet(ILogger logger, string seedHex, WalletContext db, bool mainNet, string gethAddress, string gethTxScanAddress) : base (db)
         {
             this.logger = logger;
 
-            // load saved data
-            if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
-                wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
             // create HD wallet from seed
             wallet = new Wallet(Utils.ParseHexString(seedHex), PATH);
 
@@ -85,14 +55,6 @@ namespace xchwallet
                     throw new Exception("client is on wrong network");
         }
 
-        public override void Save(string filename)
-        {
-            wd.Type = TYPE;
-            // save data
-            if (!string.IsNullOrWhiteSpace(filename))  
-                File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
-        }
-
         public override string Type()
         {
             return EthWallet.TYPE;
@@ -103,38 +65,20 @@ namespace xchwallet
             return mainNet;
         }
 
-        public override IEnumerable<string> GetTags()
+        public override WalletAddr NewAddress(string tag)
         {
-            return wd.Accounts.Keys;
-        }
-
-        public override IAddress NewAddress(string tag)
-        {
-            var pathIndex = wd.LastPathIndex + 1;
+            var pathIndex = db.LastPathIndex + 1;
             // create new address that is unused
+            var _tag = db.TagGetOrCreate(tag);
             var acct = wallet.GetAccount(pathIndex);
-            var address = new EthAccount(tag, PATH.Replace("x", pathIndex.ToString()), acct.Address, pathIndex);
+            var address = new WalletAddr(_tag, PATH.Replace("x", pathIndex.ToString()), pathIndex, acct.Address);
             // regsiter address with gethtxscan
             scanClient.DownloadString(gethTxScanAddress + "/watch_account/" + acct.Address);
             // add to address list
-            if (wd.Accounts.ContainsKey(tag))
-                wd.Accounts[tag].Add(address);
-            else
-            {
-                var list = new List<EthAccount>();
-                list.Add(address);
-                wd.Accounts[tag] = list;
-            }
+            db.WalletAddrs.Add(address);
             // update last path index and return address
-            wd.LastPathIndex = pathIndex;
+            db.LastPathIndex = pathIndex;
             return address;
-        }
-
-        public override IEnumerable<IAddress> GetAddresses(string tag)
-        {
-            if (wd.Accounts.ContainsKey(tag))
-                return wd.Accounts[tag];
-            return new List<IAddress>();
         }
 
         struct scantx
@@ -156,103 +100,90 @@ namespace xchwallet
             }
         }
 
-        void UpdateTxs(string address)
+        public override void UpdateFromBlockchain()
+        {
+            foreach (var tag in GetTags())
+            {
+                foreach (var addr in tag.Addrs)
+                    UpdateTxs(addr);
+            }
+        }
+
+        void UpdateTxs(WalletAddr address)
         {
             var blockNumTask = web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
             blockNumTask.Wait();
             var blockNum = (long)blockNumTask.Result.Value;
-            var json = scanClient.DownloadString(gethTxScanAddress + "/list_transactions/" + address);
+            var json = scanClient.DownloadString(gethTxScanAddress + "/list_transactions/" + address.Address);
             var scantxs = JsonConvert.DeserializeObject<List<scantx>>(json);
             foreach (var scantx in scantxs)
             {
                 long confirmations = 0;
                 if (scantx.block_num > 0)
                     confirmations = blockNum - scantx.block_num;
-                var tx = new EthTransaction(scantx.txid, scantx.date, scantx.from_, address, WalletDirection.Incomming,
-                    BigInteger.Parse(scantx.value), -1, confirmations);
-                List<EthTransaction> txs = null;
-
-                if (wd.Txs.ContainsKey(address))
-                    txs = wd.Txs[address];
-                else
-                    txs = new List<EthTransaction>();
-
-                bool replacedTx = false;
-                for (var i = 0; i < txs.Count; i++)
+                var ctx = db.ChainTxGet(scantx.txid);
+                if (ctx == null)
                 {
-                    if (txs[i].Id == tx.Id)
-                    {
-                        tx.WalletDetails = txs[i].WalletDetails;
-                        txs[i] = tx;
-                        replacedTx = true;
-                        break;
-                    }
+                    ctx = new ChainTx(scantx.txid, scantx.date, scantx.from_, address.Address,
+                        BigInteger.Parse(scantx.value), -1, confirmations);
+                    db.ChainTxs.Add(ctx);
                 }
-                if (!replacedTx)
-                    txs.Add(tx);
-                wd.Txs[address] = txs;
+                else
+                {
+                    ctx.Confirmations = confirmations;
+                    db.ChainTxs.Update(ctx);
+                }
+                var wtx = db.TxGet(ctx);
+                if (wtx == null)
+                {
+                    wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
+                    db.WalletTxs.Add(wtx);
+                }
             }
         }
 
-        void AddTxs(List<ITransaction> txs, string address)
+        public override IEnumerable<WalletTx> GetTransactions(string tag)
         {
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    txs.Add(tx);
+            return db.TxsGet(tag);
         }
 
-        public override IEnumerable<ITransaction> GetTransactions(string tag)
+        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
-            var txs = new List<ITransaction>(); 
-            if (wd.Accounts.ContainsKey(tag))
-                foreach (var item in wd.Accounts[tag])
-                {
-                    UpdateTxs(item.Address);
-                    AddTxs(txs, item.Address);
-                }
-            return txs;
-        }
-
-        public override IEnumerable<ITransaction> GetAddrTransactions(string address)
-        {
-            UpdateTxs(address);
-            if (wd.Txs.ContainsKey(address))
-                return wd.Txs[address];
-            return new List<ITransaction>(); 
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return addr.Txs;
         }
 
         public override BigInteger GetBalance(string tag)
         {
-            if (wd.Accounts.ContainsKey(tag))
-            {
-                BigInteger total = 0;
-                foreach (var item in wd.Accounts[tag])
-                    total += GetAddrBalance(item.Address);
-                return total;
-            }
-            return 0;
+            BigInteger total = 0;
+            foreach (var addr in db.AddrsGet(tag))
+                total += GetAddrBalance(addr);
+            return total;
         }
 
         public override BigInteger GetAddrBalance(string address)
         {
-            UpdateTxs(address);
-            if (wd.Txs.ContainsKey(address))
-            {
-                BigInteger total = 0;
-                foreach (var tx in wd.Txs[address])
-                    if (tx.Direction == WalletDirection.Incomming)
-                        total += tx.Amount;
-                    else if (tx.Direction == WalletDirection.Outgoing)
-                    {
-                        total -= tx.Amount;
-                        total -= tx.Fee;
-                    }
-                return total;
-            }
-            return 0;
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return GetAddrBalance(addr);
         }
 
-        WalletError CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
+        public BigInteger GetAddrBalance(WalletAddr addr)
+        {
+            BigInteger total = 0;
+            foreach (var tx in addr.Txs)
+                if (tx.Direction == WalletDirection.Incomming)
+                    total += tx.ChainTx.Amount;
+                else if (tx.Direction == WalletDirection.Outgoing)
+                {
+                    total -= tx.ChainTx.Amount;
+                    total -= tx.ChainTx.Fee;
+                }
+            return total;
+        }
+
+        WalletError CreateSpendTxs(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
             out List<Tuple<string, string>> signedSpendTxs)
         {
             signedSpendTxs = new List<Tuple<string, string>>();
@@ -295,14 +226,16 @@ namespace xchwallet
 
         void AddOutgoingTx(string from, string signedTx)
         {
+            var address = db.AddrGet(from);
             var tx = new Transaction(signedTx.HexToByteArray());
-            if (!wd.Txs.ContainsKey(from))
-                wd.Txs[from] = new List<EthTransaction>();
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
-            wd.Txs[from].Add(new EthTransaction(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), WalletDirection.Outgoing,
-                amount, fee, 0));
+            logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
+            var ctx = new ChainTx(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), amount, fee, 0);
+            db.ChainTxs.Add(ctx);
+            var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
+            db.WalletTxs.Add(wtx);
         }
 
         public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
@@ -349,7 +282,7 @@ namespace xchwallet
             txids = new List<string>();
             var to = NewOrUnusedAddress(tagTo);
             BigInteger balance = 0;
-            var accts = new List<IAddress>();
+            var accts = new List<WalletAddr>();
             foreach (var tag in tagFrom)
             {
                 balance += GetBalance(tag);
@@ -380,16 +313,6 @@ namespace xchwallet
                 }
             }
             return res;
-        }
-
-        public override IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address)
-        {
-            var txs = new List<EthTransaction>();
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    if (!tx.WalletDetails.Acknowledged)
-                        txs.Add(tx);
-            return txs;
         }
 
         public override bool ValidateAddress(string address)

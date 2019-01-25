@@ -9,34 +9,10 @@ using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
-    using Accts = Dictionary<string, List<WavAccount>>;
-    using AddrTxs = Dictionary<string, List<WavTransaction>>;
-
-    public class WavAccount : BaseAddress
-    {
-        public WavAccount(string tag, string path, string address) : base(tag, path, address)
-        {}
-    }
-
-    public class WavTransaction : BaseTransaction
-    {
-        public WavTransaction(string id, long date, string from, string to, WalletDirection direction, BigInteger amount, BigInteger fee, long confirmations) :
-            base(id, date, from, to, direction, amount, fee, confirmations)
-        {}
-    }
-
     public class WavWallet : BaseWallet
     {
         public const string TYPE = "WAVES";
-        struct WalletData
-        {
-            public string Type;
-            public Accts Accounts;
-            public AddrTxs Txs;
-            public int Nonce;
-        }
 
-        WalletData wd = new WalletData{Accounts = new Accts(), Txs = new AddrTxs(), Nonce = 0};
         string seedHex;
         bool mainNet;
         Node node;
@@ -55,25 +31,13 @@ namespace xchwallet
             return PrivateKeyAccount.CreateFromSeed(seed, ChainId(), nonce);
         }
 
-        public WavWallet(ILogger logger, string seedHex, string filename, bool mainNet, Uri nodeAddress)
+        public WavWallet(ILogger logger, string seedHex, WalletContext db, bool mainNet, Uri nodeAddress) : base(db)
         {
             this.logger = logger;
-
-            // load saved data
-            if (!string.IsNullOrWhiteSpace(filename) && File.Exists(filename))
-                wd = JsonConvert.DeserializeObject<WalletData>(File.ReadAllText(filename));
 
             this.seedHex = seedHex;
             this.mainNet = mainNet;
             this.node = new Node(nodeAddress.ToString(), ChainId());
-        }
-
-        public override void Save(string filename)
-        {
-            wd.Type = TYPE;
-            // save data
-            if (!string.IsNullOrWhiteSpace(filename))  
-                File.WriteAllText(filename, JsonConvert.SerializeObject(wd, Formatting.Indented));
         }
 
         public override string Type()
@@ -86,52 +50,37 @@ namespace xchwallet
             return mainNet;
         }
 
-        public override IEnumerable<string> GetTags()
+        public override WalletAddr NewAddress(string tag)
         {
-            return wd.Accounts.Keys;
-        }
-
-        void AddAddress(string tag, WavAccount address)
-        {
-            // add to address list
-            if (wd.Accounts.ContainsKey(tag))
-                wd.Accounts[tag].Add(address);
-            else
-            {
-                var list = new List<WavAccount>();
-                list.Add(address);
-                wd.Accounts[tag] = list;
-            }
-        }
-
-        public override IAddress NewAddress(string tag)
-        {
-            var nonce = wd.Nonce;
-            wd.Nonce++;
-            var acct = CreateAccount(nonce);
+            var nonce = db.LastPathIndex;
+            db.LastPathIndex++;
             // create new address that is unused
-            var address = new WavAccount(tag, nonce.ToString(), acct.Address);
+            var _tag = db.TagGetOrCreate(tag);
+            var acct = CreateAccount(nonce);
+            var address = new WalletAddr(_tag, nonce.ToString(), nonce, acct.Address);
             // add to address list
-            AddAddress(tag, address);
+            db.WalletAddrs.Add(address);
             return address;
         }
 
-        public override IEnumerable<IAddress> GetAddresses(string tag)
+        public override void UpdateFromBlockchain()
         {
-            if (wd.Accounts.ContainsKey(tag))
-                return wd.Accounts[tag];
-            return new List<IAddress>();
+            foreach (var tag in GetTags())
+            {
+                foreach (var addr in tag.Addrs)
+                    UpdateTxs(addr);
+            }
         }
 
-        void UpdateTxs(string address)
+        void UpdateTxs(WalletAddr address)
         {
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
             var limit = 100;
             while (!sufficientTxsQueried)
             {  
-                var nodeTxs = node.GetTransactions(address, limit);
-                logger.LogDebug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address, nodeTxs.Count(), limit, sufficientTxsQueried);
+                var nodeTxs = node.GetTransactions(address.Address, limit);
+                logger.LogDebug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address.Address, nodeTxs.Count(), limit, sufficientTxsQueried);
  
                 // if less txs are returned then we requested we have all txs for this account
                 if (nodeTxs.Count() < limit)
@@ -144,7 +93,6 @@ namespace xchwallet
                         var trans = (TransferTransaction)nodeTx;
                         if (trans.Asset.Id == Assets.WAVES.Id)
                         {
-                            WavTransaction tx = null;
                             var id = trans.GenerateId();
                             var date = ((DateTimeOffset)trans.Timestamp).ToUnixTimeSeconds();
 
@@ -154,43 +102,39 @@ namespace xchwallet
 
                             var amount = trans.Asset.AmountToLong(trans.Amount);
                             var fee = trans.FeeAsset.AmountToLong(trans.Fee);
-                            var confs = 0; //TODO: find out confirmations
-                            if (trans.Recipient == address)
+                            var confs = -1; //TODO: find out confirmations
+
+                            var ctx = db.ChainTxGet(id);
+                            if (ctx == null)
                             {
-                                // special case we are recipient and sender
-                                if (trans.Sender == address)
-                                    tx = new WavTransaction(id, date, address, address,
-                                        WalletDirection.Outgoing, 0, fee, confs);
-                                else
-                                    tx = new WavTransaction(id, date, trans.Sender, address,
-                                        WalletDirection.Incomming, amount, fee, confs);
+                                ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, confs);
+                                db.ChainTxs.Add(ctx);
                             }
                             else
-                                tx = new WavTransaction(id, date, trans.Sender, trans.Recipient,
-                                    WalletDirection.Outgoing, amount, fee, confs);
-
-                            List<WavTransaction> txs = null;
-                            if (wd.Txs.ContainsKey(address))
-                                txs = wd.Txs[address];
-                            else
-                                txs = new List<WavTransaction>();
-                            bool replacedTx = false;
-                            for (var i = 0; i < txs.Count; i++)
                             {
-                                if (txs[i].Id == tx.Id)
+                                ctx.Confirmations = confs;
+                                db.ChainTxs.Update(ctx);
+                                // if we are replacing txs already in our wallet we have queried sufficent txs for this account
+                                sufficientTxsQueried = true;
+                            }
+                            var wtx = db.TxGet(ctx);
+                            if (wtx == null)
+                            {
+                                if (trans.Recipient == address.Address)
                                 {
-                                    tx.WalletDetails = txs[i].WalletDetails;
-                                    txs[i] = tx;
-                                    replacedTx = true;
-
-                                    // if we are replacing txs already in our wallet we have queried sufficent txs for this account
-                                    sufficientTxsQueried = true;
-                                    break;
+                                    // special case we are recipient and sender
+                                    if (trans.Sender == address.Address)
+                                    {
+                                        ctx.Amount = 0;
+                                        wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing, Acknowledged=false };
+                                    }
+                                    else
+                                        wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming, Acknowledged=false };
                                 }
+                                else
+                                    wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing, Acknowledged=false };
+                                db.WalletTxs.Add(wtx);
                             }
-                            if (!replacedTx)
-                                txs.Add(tx);
-                            wd.Txs[address] = txs;
 
                             // record the transactions we have processed already
                             processedTxs[id] = trans;
@@ -201,65 +145,48 @@ namespace xchwallet
             }
         }
 
-        void AddTxs(List<ITransaction> txs, string address)
+        public override IEnumerable<WalletTx> GetTransactions(string tag)
         {
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    txs.Add(tx);
+            return db.TxsGet(tag);
         }
 
-        public override IEnumerable<ITransaction> GetTransactions(string tag)
+        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
-            var txs = new List<ITransaction>(); 
-            if (wd.Accounts.ContainsKey(tag))
-                foreach (var item in wd.Accounts[tag])
-                {
-                    UpdateTxs(item.Address);
-                    AddTxs(txs, item.Address);
-                }
-            return txs;
-        }
-
-        public override IEnumerable<ITransaction> GetAddrTransactions(string address)
-        {
-            UpdateTxs(address);
-            if (wd.Txs.ContainsKey(address))
-                return wd.Txs[address];
-            return new List<ITransaction>(); 
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return addr.Txs;
         }
 
         public override BigInteger GetBalance(string tag)
         {
-            if (wd.Accounts.ContainsKey(tag))
-            {
-                BigInteger total = 0;
-                foreach (var item in wd.Accounts[tag])
-                    total += GetAddrBalance(item.Address);
-                return total;
-            }
-            return 0;
+            BigInteger total = 0;
+            foreach (var addr in db.AddrsGet(tag))
+                total += GetAddrBalance(addr);
+            return total;
         }
 
         public override BigInteger GetAddrBalance(string address)
         {
-            UpdateTxs(address);
-            if (wd.Txs.ContainsKey(address))
-            {
-                BigInteger total = 0;
-                foreach (var tx in wd.Txs[address])
-                    if (tx.Direction == WalletDirection.Incomming)
-                        total += tx.Amount;
-                    else if (tx.Direction == WalletDirection.Outgoing)
-                    {
-                        total -= tx.Amount;
-                        total -= tx.Fee;
-                    }
-                return total;
-            }
-            return 0;
+            var addr = db.AddrGet(address);
+            System.Diagnostics.Debug.Assert(addr != null);
+            return GetAddrBalance(addr);
         }
 
-        WalletError CreateSpendTxs(IEnumerable<IAddress> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
+        public BigInteger GetAddrBalance(WalletAddr addr)
+        {
+            BigInteger total = 0;
+            foreach (var tx in addr.Txs)
+                if (tx.Direction == WalletDirection.Incomming)
+                    total += tx.ChainTx.Amount;
+                else if (tx.Direction == WalletDirection.Outgoing)
+                {
+                    total -= tx.ChainTx.Amount;
+                    total -= tx.ChainTx.Fee;
+                }
+            return total;
+        }
+
+        WalletError CreateSpendTxs(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
             out List<Tuple<string, TransferTransaction>> signedSpendTxs, bool ignoreFees=false)
         {
             signedSpendTxs = new List<Tuple<string, TransferTransaction>>();
@@ -303,15 +230,17 @@ namespace xchwallet
 
         void AddOutgoingTx(string from, TransferTransaction signedTx)
         {
-            if (!wd.Txs.ContainsKey(from))
-                wd.Txs[from] = new List<WavTransaction>();
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var fee = Assets.WAVES.AmountToLong(signedTx.Fee);
+            var address = db.AddrGet(from);
             var amount = Assets.WAVES.AmountToLong(signedTx.Amount);
+            var fee = Assets.WAVES.AmountToLong(signedTx.Fee);
             if (from == signedTx.Recipient) // special case if we send to ourselves
                 amount = 0;
-            wd.Txs[from].Add(new WavTransaction(signedTx.GenerateId(), date, from, signedTx.Recipient, WalletDirection.Outgoing,
-                amount, fee, 0));
+            logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
+            var ctx = new ChainTx(signedTx.GenerateId(), date, from, signedTx.Recipient, amount, fee, 0);
+            db.ChainTxs.Add(ctx);
+            var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
+            db.WalletTxs.Add(wtx);
         }
 
         public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
@@ -350,7 +279,7 @@ namespace xchwallet
             txids = new List<string>();
             var to = NewOrUnusedAddress(tagTo);
             BigInteger balance = 0;
-            var accts = new List<IAddress>();
+            var accts = new List<WalletAddr>();
             foreach (var tag in tagFrom)
             {
                 balance += GetBalance(tag);
@@ -381,16 +310,6 @@ namespace xchwallet
                 }
             }
             return res;
-        }
-
-        public override IEnumerable<ITransaction> GetAddrUnacknowledgedTransactions(string address)
-        {
-            var txs = new List<WavTransaction>();
-            if (wd.Txs.ContainsKey(address))
-                foreach (var tx in wd.Txs[address])
-                    if (!tx.WalletDetails.Acknowledged)
-                        txs.Add(tx);
-            return txs;
         }
 
         public override bool ValidateAddress(string address)

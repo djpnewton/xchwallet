@@ -26,18 +26,52 @@ namespace xchwallet.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "WalletCfgs",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Key = table.Column<string>(nullable: true),
+                    Value = table.Column<string>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_WalletCfgs", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "WalletTags",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Tag = table.Column<string>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_WalletTags", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "WalletAddrs",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    Tag = table.Column<string>(nullable: true),
+                    TagId = table.Column<int>(nullable: false),
                     Path = table.Column<string>(nullable: true),
+                    PathIndex = table.Column<int>(nullable: false),
                     Address = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_WalletAddrs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_WalletAddrs_WalletTags_TagId",
+                        column: x => x.TagId,
+                        principalTable: "WalletTags",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -72,6 +106,23 @@ namespace xchwallet.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_ChainTxs_TxId",
+                table: "ChainTxs",
+                column: "TxId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WalletAddrs_TagId",
+                table: "WalletAddrs",
+                column: "TagId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WalletCfgs_Key",
+                table: "WalletCfgs",
+                column: "Key",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_WalletTxs_ChainTxId",
                 table: "WalletTxs",
                 column: "ChainTxId");
@@ -85,6 +136,9 @@ namespace xchwallet.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "WalletCfgs");
+
+            migrationBuilder.DropTable(
                 name: "WalletTxs");
 
             migrationBuilder.DropTable(
@@ -92,6 +146,9 @@ namespace xchwallet.Migrations
 
             migrationBuilder.DropTable(
                 name: "WalletAddrs");
+
+            migrationBuilder.DropTable(
+                name: "WalletTags");
         }
     }
 }
