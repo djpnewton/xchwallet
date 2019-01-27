@@ -135,16 +135,9 @@ namespace test
             }
         }
 
-        static WalletContext CreateWalletContext(string filename)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
-            optionsBuilder.UseSqlite($"Data Source={filename}");
-            return new WalletContext(optionsBuilder.Options);
-        }
-
         static string GetWalletType(string filename)
         {
-            using (var db = CreateWalletContext(filename))
+            using (var db = WalletContext.CreateSqliteWalletContext(filename))
                 return Util.GetWalletType(db);
         }
 
@@ -153,7 +146,7 @@ namespace test
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
             const string seed = "12345678901234567890123456789012";
-            var db = CreateWalletContext(filename);
+            var db = WalletContext.CreateSqliteWalletContext(filename);
             if (walletType == BtcWallet.TYPE)
                 return new BtcWallet(GetLogger(), seed, db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)

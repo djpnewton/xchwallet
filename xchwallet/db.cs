@@ -53,7 +53,14 @@ namespace xchwallet
             set { CfgSetInt("LastPathIndex", value); }
         }
 
-        public WalletContext(DbContextOptions<WalletContext> options) : base(options)
+        public static WalletContext CreateSqliteWalletContext(string filename)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
+            optionsBuilder.UseSqlite($"Data Source={filename}");
+            return new WalletContext(optionsBuilder.Options);
+        }
+
+         public WalletContext(DbContextOptions<WalletContext> options) : base(options)
         { }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
