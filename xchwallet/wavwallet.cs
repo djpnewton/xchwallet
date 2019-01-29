@@ -117,7 +117,7 @@ namespace xchwallet
                                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
                                 sufficientTxsQueried = true;
                             }
-                            var wtx = db.TxGet(ctx);
+                            var wtx = db.TxGet(address, ctx);
                             if (wtx == null)
                             {
                                 if (trans.Recipient == address.Address)

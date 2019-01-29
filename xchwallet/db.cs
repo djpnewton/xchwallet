@@ -179,9 +179,9 @@ namespace xchwallet
             return new List<WalletTx>();
         }
 
-        public WalletTx TxGet(ChainTx tx)
+        public WalletTx TxGet(WalletAddr addr, ChainTx tx)
         {
-            return WalletTxs.SingleOrDefault(t => t.ChainTxId == tx.Id);
+            return WalletTxs.SingleOrDefault(t => t.WalletAddrId == addr.Id && t.ChainTxId == tx.Id);
         }
 
         public IEnumerable<WalletTx> TxsUnAckedGet(string address)

@@ -133,7 +133,7 @@ namespace xchwallet
                     ctx.Confirmations = confirmations;
                     db.ChainTxs.Update(ctx);
                 }
-                var wtx = db.TxGet(ctx);
+                var wtx = db.TxGet(address, ctx);
                 if (wtx == null)
                 {
                     wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
