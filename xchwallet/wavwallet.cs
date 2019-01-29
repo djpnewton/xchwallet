@@ -12,9 +12,16 @@ namespace xchwallet
     public class WavWallet : BaseWallet
     {
         public const string TYPE = "WAVES";
+        protected override string _type()
+        {
+            return TYPE;
+        }
 
         bool mainNet;
-        Node node;
+        Node node = null;
+        protected string assetId = null;
+        protected Asset asset = null;
+        protected Asset feeAsset = null;
 
         char ChainId()
         {
@@ -35,11 +42,9 @@ namespace xchwallet
 
             this.mainNet = mainNet;
             this.node = new Node(nodeAddress.ToString(), ChainId());
-        }
-
-        public override string Type()
-        {
-            return WavWallet.TYPE;
+            this.assetId = Assets.WAVES.Id;
+            this.asset = Assets.WAVES;
+            this.feeAsset = this.asset;
         }
 
         public override bool IsMainnet()
@@ -89,7 +94,7 @@ namespace xchwallet
                     if (nodeTx is TransferTransaction)
                     {
                         var trans = (TransferTransaction)nodeTx;
-                        if (trans.Asset.Id == Assets.WAVES.Id)
+                        if (trans.Asset.Id == assetId)
                         {
                             var id = trans.GenerateId();
                             var date = ((DateTimeOffset)trans.Timestamp).ToUnixTimeSeconds();
@@ -212,9 +217,9 @@ namespace xchwallet
                         amountThisAddress = amountRemaining;
                     // create signed transaction
                     var account = CreateAccount(Int32.Parse(acct.Path));
-                    var amountThisAddressDecimal = Assets.WAVES.BigIntToAmount(amountThisAddress);
-                    var feeDecimal = Assets.WAVES.BigIntToAmount(fee);
-                    var tx = new TransferTransaction(account.PublicKey, to, Assets.WAVES, amountThisAddressDecimal, feeDecimal);
+                    var amountThisAddressDecimal = asset.BigIntToAmount(amountThisAddress);
+                    var feeDecimal = asset.BigIntToAmount(fee);
+                    var tx = new TransferTransaction(account.PublicKey, to, asset, amountThisAddressDecimal, feeDecimal, feeAsset);
                     tx.Sign(account);
                     // update spend tx list and amount remaining
                     amountRemaining -= amountThisAddress;
@@ -237,8 +242,8 @@ namespace xchwallet
         {
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var address = db.AddrGet(from);
-            var amount = Assets.WAVES.AmountToLong(signedTx.Amount);
-            var fee = Assets.WAVES.AmountToLong(signedTx.Fee);
+            var amount = asset.AmountToLong(signedTx.Amount);
+            var fee = asset.AmountToLong(signedTx.Fee);
             if (from == signedTx.Recipient) // special case if we send to ourselves
                 amount = 0;
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
@@ -333,14 +338,32 @@ namespace xchwallet
 
         public override string AmountToString(BigInteger value)
         {
-            return Assets.WAVES.BigIntToAmount(value).ToString();
+            return asset.BigIntToAmount(value).ToString();
         }
 
         public override BigInteger StringToAmount(string value)
         {
-            var _scale = new decimal(1, 0, 0, false, Assets.WAVES.Decimals);
+            var _scale = new decimal(1, 0, 0, false, asset.Decimals);
             var d = decimal.Parse(value) / _scale;
             return (BigInteger)d;
+        }
+    }
+
+    public class ZapWallet : WavWallet
+    {
+        public new const string TYPE = "ZAP";
+        protected override string _type()
+        {
+            return TYPE;
+        }
+
+        public ZapWallet(ILogger logger, WalletContext db, bool mainNet, Uri nodeAddress) : base(logger, db, mainNet, nodeAddress)
+        {
+            this.assetId = "CgUrFtinLXEbJwJVjwwcppk4Vpz1nMmR3H5cQaDcUcfe";
+            if (IsMainnet())
+                this.assetId = "9R3iLi4qGLVWKc16Tg98gmRvgg1usGEYd7SgC1W5D6HB";
+            this.asset = new Asset(assetId, "Zap", 2);
+            this.feeAsset = this.asset;
         }
     }
 

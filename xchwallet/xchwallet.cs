@@ -88,7 +88,6 @@ namespace xchwallet
 
     public abstract class BaseWallet : IWallet
     {
-        public abstract string Type();
         public abstract bool IsMainnet();
         public abstract WalletAddr NewAddress(string tag);
         public abstract void UpdateFromBlockchain();
@@ -102,6 +101,7 @@ namespace xchwallet
         public abstract BigInteger StringToAmount(string value);
         public abstract bool ValidateAddress(string address);
 
+        protected abstract string _type();
 
         protected ILogger logger = null;
         protected WalletContext db = null;
@@ -158,6 +158,11 @@ namespace xchwallet
             db.CfgSet(Util.SEED_KEY, seedHex);
             db.CfgSetBool(Util.MAINNET_KEY, IsMainnet());
             db.SaveChanges();
+        }
+
+        public string Type()
+        {
+            return _type();
         }
 
         public IEnumerable<WalletTag> GetTags()

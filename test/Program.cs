@@ -35,6 +35,13 @@ namespace test
             public string Filename { get; set; }
         }
 
+        [Verb("newzapwallet", HelpText = "New zap wallet")]
+        class NewZapWalletOptions
+        {
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
+        }
+
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions
         { 
@@ -152,6 +159,8 @@ namespace test
                 return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
                 return new WavWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
+            else if (walletType == ZapWallet.TYPE)
+                return new ZapWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
             return null;
         }
 
@@ -172,6 +181,13 @@ namespace test
         static int RunNewWavWalletAndReturnExitCode(NewWavWalletOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, WavWallet.TYPE);
+            wallet.Save();
+            return 0;
+        }
+
+        static int RunNewZapWalletAndReturnExitCode(NewZapWalletOptions opts)
+        {
+            var wallet = CreateWallet(opts.Filename, ZapWallet.TYPE);
             wallet.Save();
             return 0;
         }
@@ -218,8 +234,17 @@ namespace test
             }
             else if (wallet is WavWallet)
             {
-                feeUnit = 100000; // fee per tx
-                feeMax = feeUnit * 10;
+                if (wallet is ZapWallet)
+                {
+                    //TODO: get fees from network
+                    feeUnit = 1; // fee per tx
+                    feeMax = feeUnit * 10;
+                }
+                else
+                {
+                    feeUnit = 100000; // fee per tx
+                    feeMax = feeUnit * 10;
+                }
             }
             else
                 throw new Exception("fees not set!!");
@@ -303,11 +328,13 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, NewZapWalletOptions,
+                ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
                 (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
                 (NewWavWalletOptions opts) => RunNewWavWalletAndReturnExitCode(opts),
+                (NewZapWalletOptions opts) => RunNewZapWalletAndReturnExitCode(opts),
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),

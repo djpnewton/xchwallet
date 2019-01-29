@@ -19,6 +19,10 @@ namespace xchwallet
     public class EthWallet : BaseWallet
     {
         public const string TYPE = "ETH";
+        protected override string _type()
+        {
+            return TYPE;
+        }
 
         const string PATH = "m/44'/60'/0'/x";
         const int TX_GAS = 21000;
@@ -52,11 +56,6 @@ namespace xchwallet
             if (!mainNet)
                 if (netVersionTask.Result != "3")
                     throw new Exception("client is on wrong network");
-        }
-
-        public override string Type()
-        {
-            return EthWallet.TYPE;
         }
 
         public override bool IsMainnet()

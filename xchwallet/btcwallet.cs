@@ -14,6 +14,10 @@ namespace xchwallet
     public class BtcWallet : BaseWallet
     {
         public const string TYPE = "BTC";
+        protected override string _type()
+        {
+            return TYPE;
+        }
 
         readonly BitcoinExtKey key = null;
         readonly ExplorerClient client = null;
@@ -39,11 +43,6 @@ namespace xchwallet
                 throw new Exception("unsupported network");
             client = new ExplorerClient(nbxnetwork, nbxplorerAddress);
             client.Track(pubkey);
-        }
-
-        public override string Type()
-        {
-            return BtcWallet.TYPE;
         }
 
         public override bool IsMainnet()
