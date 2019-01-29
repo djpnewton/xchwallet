@@ -19,9 +19,7 @@ namespace xchwallet
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
-        ILogger logger;
-
-        public BtcWallet(ILogger logger, string seedHex, WalletContext db, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(db)
+        public BtcWallet(ILogger logger, WalletContext db, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db)
         {
             this.logger = logger;
 

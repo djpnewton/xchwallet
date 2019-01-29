@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Numerics;
 using System.Text;
+using System.Linq;
 using Nethereum.Web3;
 using Nethereum.HdWallet;
 using Nethereum.Signer;
@@ -28,9 +29,7 @@ namespace xchwallet
         Wallet wallet = null;
         bool mainNet = false;
 
-        ILogger logger;
-
-        public EthWallet(ILogger logger, string seedHex, WalletContext db, bool mainNet, string gethAddress, string gethTxScanAddress) : base (db)
+        public EthWallet(ILogger logger, WalletContext db, bool mainNet, string gethAddress, string gethTxScanAddress) : base (logger, db)
         {
             this.logger = logger;
 
@@ -102,14 +101,15 @@ namespace xchwallet
 
         public override void UpdateFromBlockchain()
         {
+            var addedTxs = new List<ChainTx>();
             foreach (var tag in GetTags())
             {
                 foreach (var addr in tag.Addrs)
-                    UpdateTxs(addr);
+                    UpdateTxs(addr, addedTxs);
             }
         }
 
-        void UpdateTxs(WalletAddr address)
+        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs)
         {
             var blockNumTask = web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
             blockNumTask.Wait();
@@ -124,9 +124,16 @@ namespace xchwallet
                 var ctx = db.ChainTxGet(scantx.txid);
                 if (ctx == null)
                 {
-                    ctx = new ChainTx(scantx.txid, scantx.date, scantx.from_, address.Address,
-                        BigInteger.Parse(scantx.value), -1, confirmations);
-                    db.ChainTxs.Add(ctx);
+                    // if we already have a pending addition to the db we
+                    // not create a new one or update it
+                    ctx = addedTxs.SingleOrDefault(t => t.TxId == scantx.txid);
+                    if (ctx == null)
+                    {
+                        ctx = new ChainTx(scantx.txid, scantx.date, scantx.from_, address.Address,
+                            BigInteger.Parse(scantx.value), -1, confirmations);
+                        db.ChainTxs.Add(ctx);
+                        addedTxs.Add(ctx);
+                    }
                 }
                 else
                 {

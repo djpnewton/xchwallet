@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace xchwallet
@@ -10,12 +12,29 @@ namespace xchwallet
     public static class Util
     {
         public const string TYPE_KEY = "Type";
+        public const string SEED_KEY = "Seed";
+        public const string MAINNET_KEY = "Mainnet";
 
         public static string GetWalletType(WalletContext db)
         {
             var type = db.CfgGet(TYPE_KEY);
             if (type != null)
                 return type.Value;
+            return null;
+        }
+
+        public static string GetSeed(WalletContext db)
+        {
+            var type = db.CfgGet(SEED_KEY);
+            if (type != null)
+                return type.Value;
+            return null;  
+        }
+
+        public static bool? GetMainnet(WalletContext db)
+        {
+            if (db.CfgExists(MAINNET_KEY))
+                return db.CfgGetBool(MAINNET_KEY, false);
             return null;
         }
     }
@@ -83,27 +102,61 @@ namespace xchwallet
         public abstract BigInteger StringToAmount(string value);
         public abstract bool ValidateAddress(string address);
 
+
+        protected ILogger logger = null;
         protected WalletContext db = null;
+        protected string seedHex = null;
 
         void CheckType()
         {
-            var type = db.CfgGet(Util.TYPE_KEY);
+            var type = Util.GetWalletType(db);
             if (type == null)
                 // newly initialised wallet
                 return;
-            if (type.Value != Type())
-                throw new Exception($"Type found in db ({type.Value}) does not match this wallet class ({Type()})");
+            if (type != Type())
+                throw new Exception($"Type found in db ({type}) does not match this wallet class ({Type()})");
         }
 
-        public BaseWallet(WalletContext db)
+        void CheckSeed()
         {
+            seedHex = Util.GetSeed(db);
+            if (seedHex == null)
+            {
+                // newly initialised wallet
+                logger.LogDebug("New wallet, initializing seed..");
+                using (RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider())
+                {
+                    var data = new byte[256/8];
+                    rng.GetBytes(data);
+                    seedHex = BitConverter.ToString(data).Replace("-", string.Empty);
+                }
+            }
+        }
+
+        void CheckMainnet()
+        {
+            var mainnet = Util.GetMainnet(db);
+            if (mainnet == null)
+                // newly initialised wallet
+                return;
+            if (mainnet.Value != IsMainnet())
+                throw new Exception($"Mainnet found in db ({mainnet.Value}) does not match this wallet class ({IsMainnet()})");
+        }
+
+        public BaseWallet(ILogger logger, WalletContext db)
+        {
+            this.logger = logger;
             this.db = db;
             CheckType();
+            CheckSeed();
+            CheckMainnet();
         }
 
         public void Save()
         {
             db.CfgSet(Util.TYPE_KEY, Type());
+            db.CfgSet(Util.SEED_KEY, seedHex);
+            db.CfgSetBool(Util.MAINNET_KEY, IsMainnet());
             db.SaveChanges();
         }
 

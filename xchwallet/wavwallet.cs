@@ -13,10 +13,8 @@ namespace xchwallet
     {
         public const string TYPE = "WAVES";
 
-        string seedHex;
         bool mainNet;
         Node node;
-        ILogger logger;
 
         char ChainId()
         {
@@ -31,11 +29,10 @@ namespace xchwallet
             return PrivateKeyAccount.CreateFromSeed(seed, ChainId(), nonce);
         }
 
-        public WavWallet(ILogger logger, string seedHex, WalletContext db, bool mainNet, Uri nodeAddress) : base(db)
+        public WavWallet(ILogger logger, WalletContext db, bool mainNet, Uri nodeAddress) : base(logger, db)
         {
             this.logger = logger;
 
-            this.seedHex = seedHex;
             this.mainNet = mainNet;
             this.node = new Node(nodeAddress.ToString(), ChainId());
         }
@@ -65,14 +62,15 @@ namespace xchwallet
 
         public override void UpdateFromBlockchain()
         {
+            var addedTxs = new List<ChainTx>();
             foreach (var tag in GetTags())
             {
                 foreach (var addr in tag.Addrs)
-                    UpdateTxs(addr);
+                    UpdateTxs(addr, addedTxs);
             }
         }
 
-        void UpdateTxs(WalletAddr address)
+        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs)
         {
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
@@ -107,8 +105,15 @@ namespace xchwallet
                             var ctx = db.ChainTxGet(id);
                             if (ctx == null)
                             {
-                                ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, confs);
-                                db.ChainTxs.Add(ctx);
+                                // if we already have a pending addition to the db we
+                                // not create a new one or update it
+                                ctx = addedTxs.SingleOrDefault(t => t.TxId == id);
+                                if (ctx == null)
+                                {
+                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, confs);
+                                    db.ChainTxs.Add(ctx);
+                                    addedTxs.Add(ctx);
+                                }
                             }
                             else
                             {

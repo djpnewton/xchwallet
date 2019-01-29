@@ -145,14 +145,13 @@ namespace test
         {
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
-            const string seed = "12345678901234567890123456789012";
             var db = WalletContext.CreateSqliteWalletContext(filename);
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), seed, db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
+                return new BtcWallet(GetLogger(), db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
-                return new EthWallet(GetLogger(), seed, db, false, "https://ropsten.infura.io", "http://localhost:5001");
+                return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
-                return new WavWallet(GetLogger(), seed, db, false, new Uri("https://testnodes.wavesnodes.com"));
+                return new WavWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
             return null;
         }
 
