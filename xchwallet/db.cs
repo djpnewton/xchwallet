@@ -173,7 +173,8 @@ namespace xchwallet
             {
                 var txs = new List<WalletTx>();
                 foreach (var addr in _tag.Addrs)
-                    txs.AddRange(addr.Txs);
+                    if (addr != null)//Not sure why this should be needed
+                        txs.AddRange(addr.Txs);
                 return txs;
             }
             return new List<WalletTx>();
