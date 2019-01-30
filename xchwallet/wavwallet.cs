@@ -67,15 +67,16 @@ namespace xchwallet
 
         public override void UpdateFromBlockchain()
         {
+            var blockHeight = (Int64)node.GetObject("blocks/height")["height"];
             var addedTxs = new List<ChainTx>();
             foreach (var tag in GetTags())
             {
                 foreach (var addr in tag.Addrs)
-                    UpdateTxs(addr, addedTxs);
+                    UpdateTxs(addr, addedTxs, blockHeight);
             }
         }
 
-        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs)
+        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs, Int64 blockHeight)
         {
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
@@ -105,7 +106,11 @@ namespace xchwallet
 
                             var amount = trans.Asset.AmountToLong(trans.Amount);
                             var fee = trans.FeeAsset.AmountToLong(trans.Fee);
-                            var confs = -1; //TODO: find out confirmations
+                            // calculate the confs - this is slow, we could probably make it better by recording the block height in ChainTx
+                            // once then we can cheaply recalc the confirmation count
+                            var txinfo = node.GetObject($"transactions/info/{id}");
+                            var txHeight = (Int64)txinfo["height"];
+                            var confs = blockHeight - txHeight;
 
                             var ctx = db.ChainTxGet(id);
                             if (ctx == null)
