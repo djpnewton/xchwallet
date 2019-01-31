@@ -11,6 +11,17 @@
                 "/property:GenerateFullPaths=true"
             ],
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build_fiat",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/fiat/fiat.csproj",
+                "/property:GenerateFullPaths=true"
+            ],
+            "problemMatcher": "$msCompile"
         }
     ]
 }

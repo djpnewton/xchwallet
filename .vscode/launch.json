@@ -17,6 +17,18 @@
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
+            "name": ".NET Core Launch (console) - fiat",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build_fiat",
+            "program": "${workspaceFolder}/fiat/bin/Debug/netcoreapp2.1/fiat.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/test",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
             "name": ".NET Core Attach",
             "type": "coreclr",
             "request": "attach",

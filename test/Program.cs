@@ -144,7 +144,7 @@ namespace test
 
         static string GetWalletType(string filename)
         {
-            using (var db = WalletContext.CreateSqliteWalletContext(filename))
+            using (var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename))
                 return Util.GetWalletType(db);
         }
 
@@ -152,7 +152,7 @@ namespace test
         {
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
-            var db = WalletContext.CreateSqliteWalletContext(filename);
+            var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename);
             if (walletType == BtcWallet.TYPE)
                 return new BtcWallet(GetLogger(), db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)

@@ -15,7 +15,7 @@ namespace xchwallet
         public const string SEED_KEY = "Seed";
         public const string MAINNET_KEY = "Mainnet";
 
-        public static string GetWalletType(WalletContext db)
+        public static string GetWalletType(BaseContext db)
         {
             var type = db.CfgGet(TYPE_KEY);
             if (type != null)

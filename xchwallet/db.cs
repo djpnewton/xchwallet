@@ -13,11 +13,10 @@ using System.Numerics;
 
 namespace xchwallet
 {
-    public class WalletContextFactory : IDesignTimeDbContextFactory<WalletContext>
+    public class BaseContextFactory
     {
-        public WalletContext CreateDbContext(string[] args)
+        protected void initOptionsBuilder(DbContextOptionsBuilder optionsBuilder)
         {
-            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
             // choose db source
             var dbtype = Environment.GetEnvironmentVariable("DB_TYPE");
             var connection = Environment.GetEnvironmentVariable("CONNECTION_STRING");
@@ -34,33 +33,41 @@ namespace xchwallet
                 default:
                     throw new System.ArgumentException($"unknown DB_TYPE '{dbtype}'");
             }
-
+        }
+    }
+    public class WalletContextFactory : BaseContextFactory, IDesignTimeDbContextFactory<WalletContext>
+    {
+        public WalletContext CreateDbContext(string[] args)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
+            initOptionsBuilder(optionsBuilder);
             return new WalletContext(optionsBuilder.Options);
         }
     }
 
-    public class WalletContext : DbContext
+    public class FiatWalletContextFactory : BaseContextFactory, IDesignTimeDbContextFactory<FiatWalletContext>
+    {
+        public FiatWalletContext CreateDbContext(string[] args)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<FiatWalletContext>();
+            initOptionsBuilder(optionsBuilder);
+            return new FiatWalletContext(optionsBuilder.Options);
+        }
+    }
+
+    public abstract class BaseContext : DbContext
     {
         public DbSet<WalletCfg> WalletCfgs { get; set; }
-        public DbSet<ChainTx> ChainTxs { get; set; }
-        public DbSet<WalletTag> WalletTags { get; set; }
-        public DbSet<WalletAddr> WalletAddrs { get; set; }
-        public DbSet<WalletTx> WalletTxs { get; set; }
 
-        public int LastPathIndex
+        public static T CreateSqliteWalletContext<T>(string filename)
+            where T : DbContext
         {
-            get { return CfgGetInt("LastPathIndex", 0); }
-            set { CfgSetInt("LastPathIndex", value); }
-        }
-
-        public static WalletContext CreateSqliteWalletContext(string filename)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
+            var optionsBuilder = new DbContextOptionsBuilder<T>();
             optionsBuilder.UseSqlite($"Data Source={filename}");
-            return new WalletContext(optionsBuilder.Options);
+            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options });
         }
 
-         public WalletContext(DbContextOptions<WalletContext> options) : base(options)
+        public BaseContext(DbContextOptions options) : base(options)
         { }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -75,20 +82,6 @@ namespace xchwallet
             builder.Entity<WalletCfg>()
                 .HasIndex(s => s.Key)
                 .IsUnique();
-
-            builder.Entity<ChainTx>()
-                .HasIndex(t => t.TxId)
-                .IsUnique();
-
-            var bigIntConverter = new ValueConverter<BigInteger, string>(
-                v => v.ToString(),
-                v => BigInteger.Parse(v));
-            builder.Entity<ChainTx>()
-                .Property(t => t.Amount)
-                .HasConversion(bigIntConverter);
-            builder.Entity<ChainTx>()
-                .Property(t => t.Fee)
-                .HasConversion(bigIntConverter);
         }
 
         public bool CfgExists(string key)
@@ -140,6 +133,42 @@ namespace xchwallet
         public void CfgSetBool(string key, bool value)
         {
             CfgSet(key, value.ToString());
+        }
+    }
+
+    public class WalletContext : BaseContext
+    {
+        public DbSet<ChainTx> ChainTxs { get; set; }
+        public DbSet<WalletTag> WalletTags { get; set; }
+        public DbSet<WalletAddr> WalletAddrs { get; set; }
+        public DbSet<WalletTx> WalletTxs { get; set; }
+
+        public int LastPathIndex
+        {
+            get { return CfgGetInt("LastPathIndex", 0); }
+            set { CfgSetInt("LastPathIndex", value); }
+        }
+
+        public WalletContext(DbContextOptions<WalletContext> options) : base(options)
+        { }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            builder.Entity<ChainTx>()
+                .HasIndex(t => t.TxId)
+                .IsUnique();
+
+            var bigIntConverter = new ValueConverter<BigInteger, string>(
+                v => v.ToString(),
+                v => BigInteger.Parse(v));
+            builder.Entity<ChainTx>()
+                .Property(t => t.Amount)
+                .HasConversion(bigIntConverter);
+            builder.Entity<ChainTx>()
+                .Property(t => t.Fee)
+                .HasConversion(bigIntConverter);
         }
 
         public WalletTag TagGet(string tag)
@@ -322,6 +351,115 @@ namespace xchwallet
         public override string ToString()
         {
             return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Note} {WalletId} {TagOnBehalfOf}>";
+        }
+    }
+
+    public class FiatWalletContext : BaseContext
+    {
+        public DbSet<BankTx> BankTxs { get; set; }
+        public DbSet<FiatWalletTag> WalletTags { get; set; }
+        public DbSet<FiatWalletTx> WalletTxs { get; set; }
+
+        public FiatWalletContext(DbContextOptions<FiatWalletContext> options) : base(options)
+        { }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            builder.Entity<FiatWalletTx>()
+                .HasIndex(t => t.DepositCode)
+                .IsUnique();
+        }
+
+        public FiatWalletTag TagGet(string tag)
+        {
+            return WalletTags.SingleOrDefault(t => t.Tag == tag);
+        }
+
+        public FiatWalletTag TagGetOrCreate(string tag)
+        {
+            var _tag = TagGet(tag);
+            if (_tag == null)
+            {
+                _tag = new FiatWalletTag{ Tag = tag };
+                WalletTags.Add(_tag);
+            }
+            return _tag;
+        }
+
+        public IEnumerable<FiatWalletTx> TxsGet(string tag)
+        {
+            var _tag = TagGet(tag);
+            if (_tag != null)
+                return _tag.Txs;
+            return new List<FiatWalletTx>();
+        }
+
+        public FiatWalletTx TxGet(string depositCode)
+        {
+            return WalletTxs.SingleOrDefault(t => t.DepositCode == depositCode);
+        }
+    }
+
+    public class BankTx
+    {
+        public int Id { get; set; }
+        public string BankMetadata { get; set; }
+        public long Date { get; set; }
+        public long Amount { get; set; }
+
+        public BankTx()
+        {
+            this.BankMetadata = null;
+            this.Date = 0;
+            this.Amount = 0;
+        }
+
+        public BankTx(string bankMetadata, long date, long amount)
+        {
+            this.BankMetadata = bankMetadata;
+            this.Date = date;
+            this.Amount = amount;
+        }
+
+        public override string ToString()
+        {
+            return $"<{BankMetadata} {Date} {Amount}>";
+        }
+    }
+
+    public class FiatWalletTag
+    {
+        public int Id { get; set; }
+        public virtual ICollection<FiatWalletTx> Txs { get; set; }
+
+        public string Tag { get; set; }
+
+        public override string ToString()
+        {
+            return $"{Tag} ({Txs.Count})";
+        } 
+    }
+
+    public class FiatWalletTx
+    {
+        public int Id { get; set; }
+
+        public int? BankTxId { get; set; }
+        public virtual BankTx BankTx { get; set; }
+
+        public int FiatWalletTagId { get; set; }
+        public virtual FiatWalletTag Tag { get; set; }
+
+        public WalletDirection Direction { get; set; }
+        public long Date { get; set; }
+        public long Amount { get; set; }
+        public string DepositCode { get; set; }
+        
+        public override string ToString()
+        {
+            return $"<{BankTx} {DepositCode} {Direction} {Date} {Amount}>";
         }
     }
 }
