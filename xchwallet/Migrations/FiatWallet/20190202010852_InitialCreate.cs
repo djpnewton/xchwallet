@@ -59,7 +59,11 @@ namespace xchwallet.Migrations.FiatWallet
                     Direction = table.Column<int>(nullable: false),
                     Date = table.Column<long>(nullable: false),
                     Amount = table.Column<long>(nullable: false),
-                    DepositCode = table.Column<string>(nullable: true)
+                    DepositCode = table.Column<string>(nullable: true),
+                    BankName = table.Column<string>(nullable: true),
+                    BankAddress = table.Column<string>(nullable: true),
+                    AccountName = table.Column<string>(nullable: true),
+                    AccountNumber = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {

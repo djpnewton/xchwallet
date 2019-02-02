@@ -189,7 +189,8 @@ namespace fiat
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
-            Console.WriteLine(wallet.RegisterPendingWithdrawal(opts.Tag, opts.Amount));
+            var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="John Smith", AccountNumber="12-1234-1234567-12"};
+            Console.WriteLine(wallet.RegisterPendingWithdrawal(opts.Tag, opts.Amount, account));
             wallet.Save();
             return 0;
         }

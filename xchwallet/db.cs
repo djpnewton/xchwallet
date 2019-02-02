@@ -456,6 +456,11 @@ namespace xchwallet
         public long Date { get; set; }
         public long Amount { get; set; }
         public string DepositCode { get; set; }
+
+        public string BankName { get; set; }
+        public string BankAddress { get; set; }
+        public string AccountName { get; set; }
+        public string AccountNumber { get; set; }
         
         public override string ToString()
         {

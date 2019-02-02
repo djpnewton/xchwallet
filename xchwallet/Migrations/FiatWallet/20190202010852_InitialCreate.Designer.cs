@@ -9,7 +9,7 @@ using xchwallet;
 namespace xchwallet.Migrations.FiatWallet
 {
     [DbContext(typeof(FiatWalletContext))]
-    [Migration("20190131115230_InitialCreate")]
+    [Migration("20190202010852_InitialCreate")]
     partial class InitialCreate
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -51,7 +51,15 @@ namespace xchwallet.Migrations.FiatWallet
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd();
 
+                    b.Property<string>("AccountName");
+
+                    b.Property<string>("AccountNumber");
+
                     b.Property<long>("Amount");
+
+                    b.Property<string>("BankAddress");
+
+                    b.Property<string>("BankName");
 
                     b.Property<int?>("BankTxId");
 

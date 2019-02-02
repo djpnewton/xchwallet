@@ -29,7 +29,7 @@ namespace xchwallet
         IEnumerable<FiatWalletTx> GetTransactions(string tag);
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
         FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata);
-        FiatWalletTx RegisterPendingWithdrawal(string tag, long amount);
+        FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account);
         FiatWalletTx UpdateWithdrawal(string txid, long date, long amount, string bankMetadata);
         FiatWalletTx GetTx(string depositCode);
         string AmountToString(long value);
@@ -120,6 +120,8 @@ namespace xchwallet
         public FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata)
         {
             var tx = db.TxGet(depositCode);
+            if (tx == null)
+                throw new Exception("Tx not found");
             if (tx.BankTx != null)
                 throw new Exception("BankTx already set");
             var bankTx = new BankTx(bankMetadata, date, amount);
@@ -131,14 +133,15 @@ namespace xchwallet
             return tx;
         }
 
-        public FiatWalletTx RegisterPendingWithdrawal(string tag, long amount)
+        public FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account)
         {
             var depositCode = CreateDepositCode();
             while (db.TxGet(depositCode) != null)
                 depositCode = CreateDepositCode();
             var _tag = db.TagGetOrCreate(tag);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var tx = new FiatWalletTx { DepositCode=depositCode, Tag=_tag, Date=date, Direction=WalletDirection.Outgoing, Amount=amount };
+            var tx = new FiatWalletTx { DepositCode=depositCode, Tag=_tag, Date=date, Direction=WalletDirection.Outgoing, Amount=amount,
+                BankName=account.BankName, BankAddress=account.BankAddress, AccountName=account.AccountName, AccountNumber=account.AccountNumber };
             db.WalletTxs.Add(tx);
             return tx;
         }
@@ -146,6 +149,8 @@ namespace xchwallet
         public FiatWalletTx UpdateWithdrawal(string depositCode, long date, long amount, string bankMetadata)
         {
             var tx = db.TxGet(depositCode);
+            if (tx == null)
+                throw new Exception("Tx not found");
             if (tx.BankTx != null)
                 throw new Exception("BankTx already set");
             var bankTx = new BankTx(bankMetadata, date, amount);
