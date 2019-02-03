@@ -14,32 +14,13 @@ namespace test
 {
     class Program
     {
-        [Verb("newbtcwallet", HelpText = "New bitcoin wallet")]
-        class NewBtcWalletOptions
+        [Verb("new", HelpText = "New wallet")]
+        class NewOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
-        }
-
-        [Verb("newethwallet", HelpText = "New ethereum wallet")]
-        class NewEthWalletOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-        }
-
-        [Verb("newwavwallet", HelpText = "New waves wallet")]
-        class NewWavWalletOptions
-        {
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-        }
-
-        [Verb("newzapwallet", HelpText = "New zap wallet")]
-        class NewZapWalletOptions
-        {
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
+            [Option('t', "type", Required = true, HelpText = "Currency type (BTC, WAVES etc..)")]
+            public string Type { get; set; }
         }
 
         [Verb("show", HelpText = "Show wallet details")]
@@ -150,9 +131,13 @@ namespace test
 
         static IWallet CreateWallet(string filename, string walletType)
         {
+            walletType = walletType.ToUpper();
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
+            // create db context and apply migrations
             var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename);
+            db.Database.Migrate();
+
             if (walletType == BtcWallet.TYPE)
                 return new BtcWallet(GetLogger(), db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
@@ -161,33 +146,13 @@ namespace test
                 return new WavWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
             else if (walletType == ZapWallet.TYPE)
                 return new ZapWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
-            return null;
+            else
+                throw new Exception("Wallet type not recognised");
         }
 
-        static int RunNewBtcWalletAndReturnExitCode(NewBtcWalletOptions opts)
+        static int RunNewAndReturnExitCode(NewOptions opts)
         {
-            var wallet = CreateWallet(opts.Filename, BtcWallet.TYPE);
-            wallet.Save();
-            return 0;
-        }
-
-        static int RunNewEthWalletAndReturnExitCode(NewEthWalletOptions opts)
-        {
-            var wallet = CreateWallet(opts.Filename, EthWallet.TYPE);
-            wallet.Save();
-            return 0;
-        }
-
-        static int RunNewWavWalletAndReturnExitCode(NewWavWalletOptions opts)
-        {
-            var wallet = CreateWallet(opts.Filename, WavWallet.TYPE);
-            wallet.Save();
-            return 0;
-        }
-
-        static int RunNewZapWalletAndReturnExitCode(NewZapWalletOptions opts)
-        {
-            var wallet = CreateWallet(opts.Filename, ZapWallet.TYPE);
+            var wallet = CreateWallet(opts.Filename, opts.Type);
             wallet.Save();
             return 0;
         }
@@ -328,13 +293,9 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewBtcWalletOptions, NewEthWalletOptions, NewWavWalletOptions, NewZapWalletOptions,
-                ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
-                (NewBtcWalletOptions opts) => RunNewBtcWalletAndReturnExitCode(opts),
-                (NewEthWalletOptions opts) => RunNewEthWalletAndReturnExitCode(opts),
-                (NewWavWalletOptions opts) => RunNewWavWalletAndReturnExitCode(opts),
-                (NewZapWalletOptions opts) => RunNewZapWalletAndReturnExitCode(opts),
+                (NewOptions opts) => RunNewAndReturnExitCode(opts),
                 (ShowOptions opts) => RunShowAndReturnExitCode(opts),
                 (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
                 (SpendOptions opts) => RunSpendAndReturnExitCode(opts),
