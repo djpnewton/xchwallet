@@ -67,12 +67,13 @@ namespace xchwallet
 			return pubkey.Derive(path).PubKey.Hash.GetAddress(client.Network.NBitcoinNetwork);
         }
 
-        private void processUtxo(NBXplorer.Models.UTXO utxo)
+        private void processUtxo(NBXplorer.Models.UTXO utxo, int currentHeight, bool confirmed)
         {
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
             var id = utxo.Outpoint.Hash.ToString();
             var date = utxo.Timestamp.ToUnixTimeSeconds();
+            var height = confirmed ? currentHeight - utxo.Confirmations : -1;
 
             var address = db.AddrGet(to.ToString());
 
@@ -80,11 +81,12 @@ namespace xchwallet
             if (ctx == null)
             {
                 ctx = new ChainTx(id, date, "", to.ToString(),
-                    utxo.Value.Satoshi, -1, utxo.Confirmations);
+                    utxo.Value.Satoshi, -1, height, utxo.Confirmations);
                 db.ChainTxs.Add(ctx);
             }
             else
             {
+                ctx.Height = height;
                 ctx.Confirmations = utxo.Confirmations;
                 db.ChainTxs.Update(ctx);
             }
@@ -105,9 +107,9 @@ namespace xchwallet
         {
             var utxos = client.GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)
-                processUtxo(item);
+                processUtxo(item, utxos.CurrentHeight, false);
             foreach (var item in utxos.Confirmed.UTXOs)
-                processUtxo(item);
+                processUtxo(item, utxos.CurrentHeight, true);
         }
 
         public override IEnumerable<WalletTx> GetTransactions(string tag)
@@ -167,7 +169,7 @@ namespace xchwallet
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var address = db.AddrGet(from);
-            var ctx = new ChainTx(txid, date, from, to, amount, fee, 0);
+            var ctx = new ChainTx(txid, date, from, to, amount, fee, -1, 0);
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);

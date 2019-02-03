@@ -67,7 +67,7 @@ namespace xchwallet
 
         public override void UpdateFromBlockchain()
         {
-            var blockHeight = (Int64)node.GetObject("blocks/height")["height"];
+            var blockHeight = (long)node.GetObject("blocks/height")["height"];
             var addedTxs = new List<ChainTx>();
             foreach (var tag in GetTags())
             {
@@ -76,7 +76,7 @@ namespace xchwallet
             }
         }
 
-        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs, Int64 blockHeight)
+        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs, long blockHeight)
         {
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
@@ -109,7 +109,7 @@ namespace xchwallet
                             // calculate the confs - this is slow, we could probably make it better by recording the block height in ChainTx
                             // once then we can cheaply recalc the confirmation count
                             var txinfo = node.GetObject($"transactions/info/{id}");
-                            var txHeight = (Int64)txinfo["height"];
+                            var txHeight = (long)txinfo["height"];
                             var confs = blockHeight - txHeight;
 
                             var ctx = db.ChainTxGet(id);
@@ -120,13 +120,14 @@ namespace xchwallet
                                 ctx = addedTxs.SingleOrDefault(t => t.TxId == id);
                                 if (ctx == null)
                                 {
-                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, confs);
+                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, txHeight, confs);
                                     db.ChainTxs.Add(ctx);
                                     addedTxs.Add(ctx);
                                 }
                             }
                             else
                             {
+                                ctx.Height = txHeight;
                                 ctx.Confirmations = confs;
                                 db.ChainTxs.Update(ctx);
                                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
@@ -252,7 +253,7 @@ namespace xchwallet
             if (from == signedTx.Recipient) // special case if we send to ourselves
                 amount = 0;
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
-            var ctx = new ChainTx(signedTx.GenerateId(), date, from, signedTx.Recipient, amount, fee, 0);
+            var ctx = new ChainTx(signedTx.GenerateId(), date, from, signedTx.Recipient, amount, fee, -1, 0);
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);

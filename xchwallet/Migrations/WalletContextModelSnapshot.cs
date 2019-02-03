@@ -34,6 +34,8 @@ namespace xchwallet.Migrations
 
                     b.Property<string>("From");
 
+                    b.Property<long>("Height");
+
                     b.Property<string>("To");
 
                     b.Property<string>("TxId");

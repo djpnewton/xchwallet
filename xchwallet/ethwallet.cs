@@ -129,13 +129,14 @@ namespace xchwallet
                     if (ctx == null)
                     {
                         ctx = new ChainTx(scantx.txid, scantx.date, scantx.from_, address.Address,
-                            BigInteger.Parse(scantx.value), -1, confirmations);
+                            BigInteger.Parse(scantx.value), -1, scantx.block_num, confirmations);
                         db.ChainTxs.Add(ctx);
                         addedTxs.Add(ctx);
                     }
                 }
                 else
                 {
+                    ctx.Height = scantx.block_num;
                     ctx.Confirmations = confirmations;
                     db.ChainTxs.Update(ctx);
                 }
@@ -238,7 +239,7 @@ namespace xchwallet
             var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
-            var ctx = new ChainTx(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), amount, fee, 0);
+            var ctx = new ChainTx(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), amount, fee, -1, 0);
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);

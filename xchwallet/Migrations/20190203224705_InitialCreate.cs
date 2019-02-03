@@ -18,6 +18,7 @@ namespace xchwallet.Migrations
                     To = table.Column<string>(nullable: true),
                     Amount = table.Column<string>(type: "string", nullable: false),
                     Fee = table.Column<string>(type: "string", nullable: false),
+                    Height = table.Column<long>(nullable: false),
                     Confirmations = table.Column<long>(nullable: false)
                 },
                 constraints: table =>

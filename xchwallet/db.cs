@@ -256,6 +256,7 @@ namespace xchwallet
         public BigInteger Amount { get; set; }
         [Column(TypeName = "string")]
         public BigInteger Fee { get; set; }
+        public long Height { get; set; }
         public long Confirmations { get; set; }
 
         public ChainTx()
@@ -266,10 +267,11 @@ namespace xchwallet
             this.To = null;
             this.Amount = 0;
             this.Fee = 0;
+            this.Height = -1;
             this.Confirmations = 0;
         }
 
-        public ChainTx(string txid, long date, string from, string to, BigInteger amount, BigInteger fee, long confirmations)
+        public ChainTx(string txid, long date, string from, string to, BigInteger amount, BigInteger fee, long height, long confirmations)
         {
             this.TxId = txid;
             this.Date = date;
@@ -277,12 +279,13 @@ namespace xchwallet
             this.To = to;
             this.Amount = amount;
             this.Fee = fee;
+            this.Height = height;
             this.Confirmations = confirmations;
         }
 
         public override string ToString()
         {
-            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Confirmations}>";
+            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Height} {Confirmations}>";
         }
     }
 

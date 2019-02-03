@@ -8,7 +8,7 @@ using xchwallet;
 namespace xchwallet.Migrations
 {
     [DbContext(typeof(WalletContext))]
-    [Migration("20190125083442_InitialCreate")]
+    [Migration("20190203224705_InitialCreate")]
     partial class InitialCreate
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -35,6 +35,8 @@ namespace xchwallet.Migrations
                         .HasColumnType("string");
 
                     b.Property<string>("From");
+
+                    b.Property<long>("Height");
 
                     b.Property<string>("To");
 
