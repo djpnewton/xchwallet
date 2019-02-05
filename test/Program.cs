@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Collections.Generic;
-using NBitcoin;
 using CommandLine;
 using CommandLine.Text;
 using Microsoft.Extensions.Logging;
@@ -139,7 +138,7 @@ namespace test
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, Network.TestNet, new Uri("http://127.0.0.1:24444"), true);
+                return new BtcWallet(GetLogger(), db, false, new Uri("http://127.0.0.1:24444"), true);
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)

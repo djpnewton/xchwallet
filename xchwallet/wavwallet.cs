@@ -17,7 +17,6 @@ namespace xchwallet
             return TYPE;
         }
 
-        bool mainNet;
         Node node = null;
         protected string assetId = null;
         protected Asset asset = null;
@@ -25,7 +24,7 @@ namespace xchwallet
 
         char ChainId()
         {
-            if (mainNet)
+            if (mainnet)
                 return Node.MainNetChainId;
             return Node.TestNetChainId;
         }
@@ -36,11 +35,10 @@ namespace xchwallet
             return PrivateKeyAccount.CreateFromSeed(seed, ChainId(), nonce);
         }
 
-        public WavWallet(ILogger logger, WalletContext db, bool mainNet, Uri nodeAddress) : base(logger, db)
+        public WavWallet(ILogger logger, WalletContext db, bool mainnet, Uri nodeAddress) : base(logger, db, mainnet)
         {
             this.logger = logger;
 
-            this.mainNet = mainNet;
             this.node = new Node(nodeAddress.ToString(), ChainId());
             this.assetId = Assets.WAVES.Id;
             this.asset = Assets.WAVES;
@@ -49,7 +47,7 @@ namespace xchwallet
 
         public override bool IsMainnet()
         {
-            return mainNet;
+            return mainnet;
         }
 
         public override WalletAddr NewAddress(string tag)

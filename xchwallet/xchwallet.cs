@@ -106,6 +106,7 @@ namespace xchwallet
         protected ILogger logger = null;
         protected WalletContext db = null;
         protected string seedHex = null;
+        protected bool mainnet = false;
 
         void CheckType()
         {
@@ -143,10 +144,11 @@ namespace xchwallet
                 throw new Exception($"Mainnet found in db ({mainnet.Value}) does not match this wallet class ({IsMainnet()})");
         }
 
-        public BaseWallet(ILogger logger, WalletContext db)
+        public BaseWallet(ILogger logger, WalletContext db, bool mainnet)
         {
             this.logger = logger;
             this.db = db;
+            this.mainnet = mainnet;
             CheckType();
             CheckSeed();
             CheckMainnet();

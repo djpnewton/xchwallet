@@ -31,9 +31,8 @@ namespace xchwallet
         string gethTxScanAddress = null;
         WebClient scanClient = null;
         Wallet wallet = null;
-        bool mainNet = false;
 
-        public EthWallet(ILogger logger, WalletContext db, bool mainNet, string gethAddress, string gethTxScanAddress) : base (logger, db)
+        public EthWallet(ILogger logger, WalletContext db, bool mainnet, string gethAddress, string gethTxScanAddress) : base (logger, db, mainnet)
         {
             this.logger = logger;
 
@@ -47,20 +46,19 @@ namespace xchwallet
             this.gethTxScanAddress = gethTxScanAddress;
             scanClient = new WebClient();
 
-            this.mainNet = mainNet;
             var netVersionTask = web3.Net.Version.SendRequestAsync();
             netVersionTask.Wait();
-            if (mainNet)
+            if (mainnet)
                 if (netVersionTask.Result != "1")
                     throw new Exception("client is on wrong network");
-            if (!mainNet)
+            if (!mainnet)
                 if (netVersionTask.Result != "3")
                     throw new Exception("client is on wrong network");
         }
 
         public override bool IsMainnet()
         {
-            return mainNet;
+            return mainnet;
         }
 
         public override WalletAddr NewAddress(string tag)

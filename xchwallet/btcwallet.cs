@@ -23,11 +23,12 @@ namespace xchwallet
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
-        public BtcWallet(ILogger logger, WalletContext db, Network network, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db)
+        public BtcWallet(ILogger logger, WalletContext db, bool mainnet, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db, mainnet)
         {
             this.logger = logger;
 
             // create extended key
+            var network = mainnet ? Network.Main : Network.TestNet;
             key = new BitcoinExtKey(new ExtKey(seedHex), network);
             var strpubkey = $"{key.Neuter().ToString()}";
             if (useLegacyAddrs)
@@ -35,19 +36,17 @@ namespace xchwallet
             pubkey = (DirectDerivationStrategy)new DerivationStrategyFactory(network).Parse(strpubkey);
             // create NBXplorer client
             NBXplorerNetwork nbxnetwork;
-            if (network == Network.Main)
+            if (mainnet)
                 nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Mainnet).GetFromCryptoCode("BTC");
-            else if (network == Network.TestNet)
+            else
                 nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Testnet).GetFromCryptoCode("BTC");
-            else 
-                throw new Exception("unsupported network");
             client = new ExplorerClient(nbxnetwork, nbxplorerAddress);
             client.Track(pubkey);
         }
 
         public override bool IsMainnet()
         {
-            return client.Network.NBitcoinNetwork == Network.Main;
+            return mainnet;
         }
 
         public override WalletAddr NewAddress(string tag)
