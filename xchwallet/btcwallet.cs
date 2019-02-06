@@ -74,7 +74,14 @@ namespace xchwallet
             var date = utxo.Timestamp.ToUnixTimeSeconds();
             var height = confirmed ? currentHeight - utxo.Confirmations : -1;
 
+            logger.LogInformation($"processing UTXO - txid {id} - destination addr {to}");
+
             var address = db.AddrGet(to.ToString());
+            if (address == null)
+            {
+                logger.LogError($"Address not found for {to}");
+                return;
+            }
 
             var ctx = db.ChainTxGet(id);
             if (ctx == null)
