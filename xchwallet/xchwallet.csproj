@@ -4,6 +4,8 @@
     <ProjectReference Include="..\WavesCS\WavesCS\WavesCS.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="2.2.0" />
     <PackageReference Include="Newtonsoft.JSON" Version="11.0.2" />
     <PackageReference Include="Nethereum.HdWallet" Version="2.2.3" />
     <PackageReference Include="Nethereum.Web3" Version="2.2.3" />

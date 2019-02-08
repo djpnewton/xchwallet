@@ -4,6 +4,9 @@ using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Logging.Debug;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Numerics;
@@ -41,7 +44,7 @@ namespace xchwallet
         {
             var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
             initOptionsBuilder(optionsBuilder);
-            return new WalletContext(optionsBuilder.Options);
+            return new WalletContext(optionsBuilder.Options, false);
         }
     }
 
@@ -51,7 +54,7 @@ namespace xchwallet
         {
             var optionsBuilder = new DbContextOptionsBuilder<FiatWalletContext>();
             initOptionsBuilder(optionsBuilder);
-            return new FiatWalletContext(optionsBuilder.Options);
+            return new FiatWalletContext(optionsBuilder.Options, false);
         }
     }
 
@@ -59,19 +62,31 @@ namespace xchwallet
     {
         public DbSet<WalletCfg> WalletCfgs { get; set; }
 
-        public static T CreateSqliteWalletContext<T>(string filename)
+        public static T CreateSqliteWalletContext<T>(string filename, bool logToConsole)
             where T : DbContext
         {
             var optionsBuilder = new DbContextOptionsBuilder<T>();
             optionsBuilder.UseSqlite($"Data Source={filename}");
-            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options });
+            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
-        public BaseContext(DbContextOptions options) : base(options)
-        { }
+        bool logToConsole;
+
+        public BaseContext(DbContextOptions options, bool logToConsole) : base(options)
+        {
+            this.logToConsole = logToConsole;
+        }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
+            if (logToConsole)
+            {
+                var loggerFactory = new LoggerFactory()
+                    .AddDebug((categoryName, logLevel) => (logLevel == LogLevel.Information) && (categoryName == DbLoggerCategory.Database.Command.Name))
+                    .AddConsole((categoryName, logLevel) => (logLevel == LogLevel.Information) && (categoryName == DbLoggerCategory.Database.Command.Name))
+                    ;
+                optionsBuilder.UseLoggerFactory(loggerFactory);
+            }
             optionsBuilder.UseLazyLoadingProxies();
         }
 
@@ -149,7 +164,7 @@ namespace xchwallet
             set { CfgSetInt("LastPathIndex", value); }
         }
 
-        public WalletContext(DbContextOptions<WalletContext> options) : base(options)
+        public WalletContext(DbContextOptions<WalletContext> options, bool logToConsole) : base(options, logToConsole)
         { }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -363,7 +378,7 @@ namespace xchwallet
         public DbSet<FiatWalletTag> WalletTags { get; set; }
         public DbSet<FiatWalletTx> WalletTxs { get; set; }
 
-        public FiatWalletContext(DbContextOptions<FiatWalletContext> options) : base(options)
+        public FiatWalletContext(DbContextOptions<FiatWalletContext> options, bool logToConsole) : base(options, logToConsole)
         { }
 
         protected override void OnModelCreating(ModelBuilder builder)

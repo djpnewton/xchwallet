@@ -118,7 +118,7 @@ namespace fiat
 
         static string GetWalletType(string filename)
         {
-            using (var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename))
+            using (var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename, false))
                 return Util.GetWalletType(db);
         }
 
@@ -127,7 +127,7 @@ namespace fiat
             GetLogger().LogDebug("Creating wallet ({0}) using file: '{1}'", walletType, filename);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename);
+            var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename, false);
             db.Database.Migrate();
             // add dummy bank account
             var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="Wallets Inc.", AccountNumber="22-4444-7777777-22"};

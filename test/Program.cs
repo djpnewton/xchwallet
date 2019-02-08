@@ -13,8 +13,14 @@ namespace test
 {
     class Program
     {
+        class CommonOptions
+        {
+            [Option("showsql", Default = false, HelpText = "Show SQL commands")]
+            public bool ShowSql { get; set; }
+        }
+
         [Verb("new", HelpText = "New wallet")]
-        class NewOptions
+        class NewOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -23,14 +29,14 @@ namespace test
         }
 
         [Verb("show", HelpText = "Show wallet details")]
-        class ShowOptions
+        class ShowOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
         }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
-        class NewAddrOptions
+        class NewAddrOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -40,7 +46,7 @@ namespace test
         }
 
         [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
-        class SpendOptions
+        class SpendOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -56,7 +62,7 @@ namespace test
         }
 
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
-        class ConsolidateOptions
+        class ConsolidateOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -69,7 +75,7 @@ namespace test
         }
 
         [Verb("showunack", HelpText = "Show unacknowledged transactions")]
-        class ShowUnAckOptions
+        class ShowUnAckOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -79,7 +85,7 @@ namespace test
         }
 
         [Verb("ack", HelpText = "Acknowledge transactions")]
-        class AckOptions
+        class AckOptions : CommonOptions
         { 
             [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
             public string Filename { get; set; }
@@ -124,17 +130,17 @@ namespace test
 
         static string GetWalletType(string filename)
         {
-            using (var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename))
+            using (var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename, false))
                 return Util.GetWalletType(db);
         }
 
-        static IWallet CreateWallet(string filename, string walletType)
+        static IWallet CreateWallet(string filename, string walletType, bool showSql)
         {
             walletType = walletType.ToUpper();
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename);
+            var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename, showSql);
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
@@ -151,7 +157,7 @@ namespace test
 
         static int RunNewAndReturnExitCode(NewOptions opts)
         {
-            var wallet = CreateWallet(opts.Filename, opts.Type);
+            var wallet = CreateWallet(opts.Filename, opts.Type, opts.ShowSql);
             wallet.Save();
             return 0;
         }
@@ -159,7 +165,7 @@ namespace test
         static int RunShowAndReturnExitCode(ShowOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
@@ -173,7 +179,7 @@ namespace test
         static int RunNewAddrAndReturnExitCode(NewAddrOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
@@ -217,7 +223,7 @@ namespace test
         static int RunSpendAndReturnExitCode(SpendOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
@@ -238,7 +244,7 @@ namespace test
         static int RunConsolidateAndReturnExitCode(ConsolidateOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
@@ -262,7 +268,7 @@ namespace test
         static int RunShowUnAckAndReturnExitCode(ShowUnAckOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
@@ -276,7 +282,7 @@ namespace test
         static int RunAckAndReturnExitCode(AckOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
             if (wallet == null)
             {
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
