@@ -170,22 +170,23 @@ namespace xchwallet
             return addr;
         }
 
-        void AddOutgoingTx(string txid, string from, string to, BigInteger amount, BigInteger fee)
+        void AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee)
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var address = db.AddrGet(from);
-            var ctx = new ChainTx(txid, date, from, to, amount, fee, -1, 0);
+            var ctx = new ChainTx(txid, date, from.Address, to, amount, fee, -1, 0);
             db.ChainTxs.Add(ctx);
-            var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
+            var wtx = new WalletTx{ChainTx=ctx, Address=from, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
         }
 
-        FeeRate GetFeeRate(Transaction tx, List<Key> toBeSpentKeys, List<Coin> toBeSpent)
+        FeeRate GetFeeRate(Transaction tx, List<Tuple<WalletAddr, Coin, Key>> toBeSpent)
         {
             // sign tx before calculating fee so it includes signatures
-            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
-            return tx.GetFeeRate(toBeSpent.ToArray());
+            var coins = from a in toBeSpent select a.Item2;
+            var keys = from a in toBeSpent select a.Item3;
+            tx.Sign(keys.ToArray(), coins.ToArray());
+            return tx.GetFeeRate(coins.ToArray());
         }
 
         public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
@@ -198,7 +199,7 @@ namespace xchwallet
             var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tag
             var addrs = GetAddresses(tag);
-            var candidates = new List<Tuple<Coin, string>>();
+            var candidates = new List<Tuple<WalletAddr, Coin>>();
             var utxos = client.GetUTXOs(pubkey);
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
@@ -206,22 +207,20 @@ namespace xchwallet
                 foreach (var addr in addrs)
                     if (addrStr == addr.Address)
                     {
-                        candidates.Add(new Tuple<Coin, string>(utxo.AsCoin(), addr.Path));
+                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
                         break;
                     }
             }
             // add inputs until we can satisfy our output
             BigInteger totalInput = 0;
-            var toBeSpent = new List<Coin>();
-            var toBeSpentKeys = new List<Key>(); 
+            var toBeSpent = new List<Tuple<WalletAddr, Coin, Key>>();
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.Inputs.Add(new TxIn(candidate.Item1.Outpoint));
-                toBeSpent.Add(candidate.Item1);
-                totalInput += candidate.Item1.Amount.Satoshi;
-                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
-                toBeSpentKeys.Add(privateKey);
+                tx.Inputs.Add(new TxIn(candidate.Item2.Outpoint));
+                totalInput += candidate.Item2.Amount.Satoshi;
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item1.Path)).PrivateKey;
+                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Item1, candidate.Item2, privateKey));
                 // check if we have enough inputs
                 if (totalInput >= amount)
                     break;
@@ -231,7 +230,7 @@ namespace xchwallet
             if (totalInput < amount)
                 return WalletError.InsufficientFunds;
             // check fee rate
-            var feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
+            var feeRate = GetFeeRate(tx, toBeSpent);
             var currentSatsPerByte = feeRate.FeePerK / 1024;
             if (currentSatsPerByte > feeUnit)
             {
@@ -245,18 +244,22 @@ namespace xchwallet
                 // add the change output
                 changeOutput = tx.Outputs.Add(currentFee - targetFee, changeAddress);
             }
+            var coins = from a in toBeSpent select a.Item2;
+            var keys = from a in toBeSpent select a.Item3;
             // sign inputs (after adding a change output)
-            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            tx.Sign(keys.ToArray(), coins.ToArray());
             // recalculate fee rate and check it is less then the max fee
-            var fee = tx.GetFee(toBeSpent.ToArray());
+            var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
+            // choose from address (TODO: handle multiple from addresses)
+            var fromAddr = toBeSpent.First().Item1;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), tag, to, amount, fee.Satoshi);
+                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi);
                 ((List<string>)txids).Add(tx.GetHash().ToString());
                 return WalletError.Success;
             }
@@ -282,7 +285,7 @@ namespace xchwallet
             var toaddr = BitcoinAddress.Create(to.Address, client.Network.NBitcoinNetwork);
             var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tags
-            var candidates = new List<Tuple<Coin, string>>();
+            var candidates = new List<Tuple<WalletAddr, Coin>>();
             var utxos = client.GetUTXOs(pubkey);
             foreach (var tag in tagFrom)
             {
@@ -293,23 +296,21 @@ namespace xchwallet
                     foreach (var addr in addrs)
                         if (addrStr == addr.Address)
                         {
-                            candidates.Add(new Tuple<Coin, string>(utxo.AsCoin(), addr.Path));
+                            candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
                             break;
                         }
                 }
             }
             // add all inputs so we can satisfy our output
             BigInteger totalInput = 0;
-            var toBeSpent = new List<Coin>();
-            var toBeSpentKeys = new List<Key>(); 
+            var toBeSpent = new List<Tuple<WalletAddr, Coin, Key>>();
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.Inputs.Add(new TxIn(candidate.Item1.Outpoint));
-                toBeSpent.Add(candidate.Item1);
-                totalInput += candidate.Item1.Amount.Satoshi;
-                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item2)).PrivateKey;
-                toBeSpentKeys.Add(privateKey);
+                tx.Inputs.Add(new TxIn(candidate.Item2.Outpoint));
+                totalInput += candidate.Item2.Amount.Satoshi;
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item1.Path)).PrivateKey;
+                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Item1, candidate.Item2, privateKey));
             }
             // check we have enough inputs
             if (totalInput < amount)
@@ -321,21 +322,25 @@ namespace xchwallet
             {
                 tx.Outputs[0].Value -= 1;
 
-                feeRate = GetFeeRate(tx, toBeSpentKeys, toBeSpent);
+                feeRate = GetFeeRate(tx, toBeSpent);
                 currentSatsPerByte = feeRate.FeePerK / 1024;
             }
             // sign inputs
-            tx.Sign(toBeSpentKeys.ToArray(), toBeSpent.ToArray());
+            var coins = from a in toBeSpent select a.Item2;
+            var keys = from a in toBeSpent select a.Item3;
+            tx.Sign(keys.ToArray(), coins.ToArray());
             // recalculate fee rate and check it is less then the max fee
-            var fee = tx.GetFee(toBeSpent.ToArray());
+            var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
+            // choose from address (TODO: handle multiple from addresses)
+            var fromAddr = toBeSpent.First().Item1;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), tagTo, to.Address, amount, fee.Satoshi);
+                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi);
                 ((List<string>)txids).Add(tx.GetHash().ToString());
                 return WalletError.Success;
             }
