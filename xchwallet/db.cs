@@ -311,6 +311,11 @@ namespace xchwallet
 
         public string Tag { get; set; }
 
+        public WalletTag()
+        {
+            Addrs = new List<WalletAddr>();
+        }
+
         public override string ToString()
         {
             return $"{Tag} ({Addrs.Count})";
@@ -331,6 +336,7 @@ namespace xchwallet
         public WalletAddr()
         {
             this.Tag = null;
+            this.Txs = new List<WalletTx>();
             this.Path = null;
             this.PathIndex = 0;
             this.Address = null;
@@ -453,6 +459,11 @@ namespace xchwallet
         public virtual ICollection<FiatWalletTx> Txs { get; set; }
 
         public string Tag { get; set; }
+
+        public FiatWalletTag()
+        {
+            Txs = new List<FiatWalletTx>();
+        }
 
         public override string ToString()
         {
