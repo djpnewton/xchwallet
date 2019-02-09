@@ -354,7 +354,15 @@ namespace xchwallet
 
         public override bool ValidateAddress(string address)
         {
-            throw new Exception("not yet implemented");
+            try
+            {
+                var network = IsMainnet() ? Network.Main : Network.TestNet;
+                return Network.Parse<BitcoinAddress>(address, network) != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public override string AmountToString(BigInteger value)
