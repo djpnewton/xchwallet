@@ -321,6 +321,7 @@ namespace xchwallet
             while (currentSatsPerByte < feeUnit)
             {
                 tx.Outputs[0].Value -= 1;
+                amount -= 1;
 
                 feeRate = GetFeeRate(tx, toBeSpent);
                 currentSatsPerByte = feeRate.FeePerK / 1024;
