@@ -65,7 +65,8 @@ namespace xchwallet
         {
             var pathIndex = db.LastPathIndex + 1;
             // create new address that is unused
-            var _tag = db.TagGetOrCreate(tag);
+            var _tag = db.TagGet(tag);
+            Util.WalletAssert(_tag != null, $"Tag '{tag}' does not exist");
             var acct = wallet.GetAccount(pathIndex);
             var address = new WalletAddr(_tag, PATH.Replace("x", pathIndex.ToString()), pathIndex, acct.Address);
             // regsiter address with gethtxscan
@@ -155,7 +156,7 @@ namespace xchwallet
         public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return addr.Txs;
         }
 
@@ -170,7 +171,7 @@ namespace xchwallet
         public override BigInteger GetAddrBalance(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return GetAddrBalance(addr);
         }
 
@@ -186,6 +187,34 @@ namespace xchwallet
                     total -= tx.ChainTx.Fee;
                 }
             return total;
+        }
+
+        WalletError CreateSpendTx(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
+            out Tuple<string, string> signedSpendTx)
+        {
+            signedSpendTx = null;
+            var fee = gasPrice * gasLimit;
+            if (fee > feeMax)
+                return WalletError.MaxFeeBreached;
+            foreach (var acct in candidates)
+            {
+                // get transaction count and balance for the account
+                var txCountTask = web3.Eth.Transactions.GetTransactionCount.SendRequestAsync(acct.Address);
+                txCountTask.Wait();
+                var txCount = txCountTask.Result.Value;
+                var balance = GetAddrBalance(acct.Address);
+                // if the balance is sufficient then we can use this account
+                if (balance >= fee + amount)
+                {
+                    // create signed transaction
+                    var account = wallet.GetAccount(acct.Address);
+                    var signedTx = Web3.OfflineTransactionSigner.SignTransaction(account.PrivateKey, to, amount, txCount, gasPrice, gasLimit);
+                    // return success
+                    signedSpendTx = new Tuple<string, string>(acct.Address, signedTx);
+                    return WalletError.Success;
+                }
+            }
+            return WalletError.InsufficientFunds;
         }
 
         WalletError CreateSpendTxs(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,
@@ -229,7 +258,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        void AddOutgoingTx(string from, string signedTx)
+        WalletTx AddOutgoingTx(string from, string signedTx)
         {
             var address = db.AddrGet(from);
             var tx = new Transaction(signedTx.HexToByteArray());
@@ -241,11 +270,12 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
         {
-            txids = new List<string>();
+            wtx = null;
             // get gas price
             //var gasPriceTask = web3.Eth.GasPrice.SendRequestAsync();
             //gasPriceTask.Wait();
@@ -253,28 +283,24 @@ namespace xchwallet
             var gasPrice = feeUnit;
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
-            List<Tuple<string, string>> signedSpendTxs;
+            Tuple<string, string> signedSpendTx;
                     //TODO: check gas price, and/or allow custom setting (max total wei too?)
-            var res = CreateSpendTxs(accts, to, amount, gasPrice, TX_GAS, feeMax, out signedSpendTxs);
+            var res = CreateSpendTx(accts, to, amount, gasPrice, TX_GAS, feeMax, out signedSpendTx);
             if (res == WalletError.Success)
             {
-                // send each raw signed transaction and get the txid
-                foreach (var tx in signedSpendTxs)
+                // send the raw signed transaction and get the txid
+                try
                 {
-                    try
-                    {
-                        var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
-                        sendTxTask.Wait();
-                        var txid = sendTxTask.Result;
-                        ((List<string>)txids).Add(txid);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError("{0}", ex);
-                        return WalletError.PartialBroadcast;
-                    }
+                    var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(signedSpendTx.Item2);
+                    sendTxTask.Wait();
+                    var txid = sendTxTask.Result;
                     // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2);
+                    wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError("{0}", ex);
+                    return WalletError.FailedBroadcast;
                 }
             }
             return res;

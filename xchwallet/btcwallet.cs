@@ -52,7 +52,8 @@ namespace xchwallet
         public override WalletAddr NewAddress(string tag)
         {
             // create new address that is unused
-            var _tag = db.TagGetOrCreate(tag);
+            var _tag = db.TagGet(tag);
+            Util.WalletAssert(_tag != null, $"Tag '{tag}' does not exist");
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
             var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
             var address = new WalletAddr(_tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
@@ -126,7 +127,7 @@ namespace xchwallet
         public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return addr.Txs;
         }
 
@@ -141,7 +142,7 @@ namespace xchwallet
         public override BigInteger GetAddrBalance(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return GetAddrBalance(addr);
         }
 
@@ -159,18 +160,18 @@ namespace xchwallet
             return total;
         }
 
-        public BitcoinAddress AddChangeAddress(string tag)
+        public BitcoinAddress AddChangeAddress(WalletTag tag)
         {
             // create new address that is unused
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Change, reserve: false);
             var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-            var address = new WalletAddr(db.TagGetOrCreate(tag), keypathInfo.KeyPath.ToString(), 0, addr.ToString());
+            var address = new WalletAddr(tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             // add to address list
             db.WalletAddrs.Add(address);
             return addr;
         }
 
-        void AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee)
+        WalletTx AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee)
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -178,6 +179,7 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=from, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            return wtx;
         }
 
         FeeRate GetFeeRate(Transaction tx, List<Tuple<WalletAddr, Coin, Key>> toBeSpent)
@@ -189,9 +191,11 @@ namespace xchwallet
             return tx.GetFeeRate(coins.ToArray());
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
         {
-            txids = new List<string>();
+            wtx = null;
+            var tagChange_ = db.TagGet(tagChange);
+            Util.WalletAssert(tagChange_ != null, $"Tag '{tagChange}' does not exist");
             // create tx template with destination as first output
             var tx = Transaction.Create(client.Network.NBitcoinNetwork);
             var money = new Money((ulong)amount);
@@ -227,6 +231,7 @@ namespace xchwallet
                 //TODO: take into account fees......
             }
             // check we have enough inputs
+            logger.LogDebug($"totalInput {totalInput}, amount: {amount}");
             if (totalInput < amount)
                 return WalletError.InsufficientFunds;
             // check fee rate
@@ -235,7 +240,7 @@ namespace xchwallet
             if (currentSatsPerByte > feeUnit)
             {
                 // create a change address
-                var changeAddress = AddChangeAddress(tagChange);
+                var changeAddress = AddChangeAddress(tagChange_);
                 // calculate the target fee
                 var currentFee = feeRate.GetFee(tx.GetVirtualSize());
                 var targetFee = tx.GetVirtualSize() * (long)feeUnit;
@@ -259,8 +264,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi);
-                ((List<string>)txids).Add(tx.GetHash().ToString());
+                wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi);
                 return WalletError.Success;
             }
             else

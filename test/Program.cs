@@ -17,40 +17,31 @@ namespace test
         {
             [Option("showsql", Default = false, HelpText = "Show SQL commands")]
             public bool ShowSql { get; set; }
+            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
+            public string Filename { get; set; }
         }
 
         [Verb("new", HelpText = "New wallet")]
         class NewOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
             [Option('t', "type", Required = true, HelpText = "Currency type (BTC, WAVES etc..)")]
             public string Type { get; set; }
         }
 
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions : CommonOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-        }
+        { }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
         class NewAddrOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tag", Required = true, HelpText = "Wallet tag for new address")]
             public string Tag { get; set; }
         }
 
-        [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
-        class SpendOptions : CommonOptions
+        [Verb("pendingspend", HelpText = "Create pending spend")]
+        class PendingSpendOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tag", Required = true, HelpText = "Wallet tag to spend from")]
             public string Tag { get; set; }
 
@@ -61,12 +52,34 @@ namespace test
             public ulong Amount { get; set; }
         }
 
+        [Verb("showpending", HelpText = "Show all pending spends")]
+        class ShowPendingOptions : CommonOptions
+        { 
+            [Option('t', "tag", Required = true, HelpText = "Wallet tag to spend from")]
+            public string Tag { get; set; }
+        }
+
+        [Verb("actionpending", HelpText = "Action a pending spend")]
+        class ActionPendingOptions : CommonOptions
+        { 
+            [Option('s', "spendcode", Required = true, HelpText = "Spend code to identify pending spend")]
+            public string SpendCode { get; set; }
+        }
+
+        [Verb("cancelpending", HelpText = "Cancel a pending spend")]
+        class CancelPendingOptions : CommonOptions
+        { 
+            [Option('s', "spendcode", Required = true, HelpText = "Spend code to identify pending spend")]
+            public string SpendCode { get; set; }
+        }
+
+        [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
+        class SpendOptions : PendingSpendOptions
+        { }
+
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
         class ConsolidateOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tags", Required = true, HelpText = "Wallet tag(s) to spend from")]
             public string Tags { get; set; }
 
@@ -77,9 +90,6 @@ namespace test
         [Verb("showunack", HelpText = "Show unacknowledged transactions")]
         class ShowUnAckOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tag", Required = true, HelpText = "Wallet tag")]
             public string Tag { get; set; }
         }
@@ -87,9 +97,6 @@ namespace test
         [Verb("ack", HelpText = "Acknowledge transactions")]
         class AckOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tag", Required = true, HelpText = "Wallet tag")]
             public string Tag { get; set; }
         }
@@ -113,8 +120,6 @@ namespace test
             {
                 Console.WriteLine($"{tag.Tag}:");
                 var addrs = tag.Addrs;
-                if (!addrs.Any())
-                    wallet.NewAddress(tag.Tag);
                 Console.WriteLine("  addrs:");
                 addrs = tag.Addrs;
                 foreach (var addr in addrs)
@@ -155,14 +160,25 @@ namespace test
                 throw new Exception("Wallet type not recognised");
         }
 
-        static int RunNewAndReturnExitCode(NewOptions opts)
+        static WalletTag EnsureTagExists(IWallet wallet, string tag)
+        {
+            var tags = wallet.GetTags();
+            foreach (var tag_ in tags)
+                if (tag_.Tag == tag)
+                    return tag_;
+            var tag__ = wallet.NewTag(tag);
+            wallet.Save();
+            return tag__;
+        }
+
+        static int RunNew(NewOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, opts.Type, opts.ShowSql);
             wallet.Save();
             return 0;
         }
 
-        static int RunShowAndReturnExitCode(ShowOptions opts)
+        static int RunShow(ShowOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -176,7 +192,7 @@ namespace test
             return 0;
         }
 
-        static int RunNewAddrAndReturnExitCode(NewAddrOptions opts)
+        static int RunNewAddr(NewAddrOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -185,6 +201,7 @@ namespace test
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
+            EnsureTagExists(wallet, opts.Tag);
             Console.WriteLine(wallet.NewAddress(opts.Tag));
             wallet.Save();
             return 0;
@@ -220,7 +237,38 @@ namespace test
                 throw new Exception("fees not set!!");
         }
 
-        static int RunSpendAndReturnExitCode(SpendOptions opts)
+        static int RunPendingSpend(PendingSpendOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            EnsureTagExists(wallet, opts.Tag);
+            var spend = wallet.RegisterPendingSpend(opts.Tag, opts.Tag, opts.To, opts.Amount);
+            Console.WriteLine(spend);
+            wallet.Save();
+            return 0;
+        }
+
+        static int RunShowPending(ShowPendingOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var spends = wallet.PendingSpendsGet(opts.Tag, new PendingSpendState[] { PendingSpendState.Pending, PendingSpendState.Error });
+            foreach (var spend in spends)
+                Console.WriteLine(spend);
+            return 0;
+        }
+
+        static int RunActionPending(ActionPendingOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -232,16 +280,52 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            IEnumerable<string> txids;
-            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out txids);
+            WalletTx wtx;
+            var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out wtx);
             Console.WriteLine(res);
-            foreach (var txid in txids)
-                Console.WriteLine(txid);
+            if (wtx != null)
+                Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
         }
 
-        static int RunConsolidateAndReturnExitCode(ConsolidateOptions opts)
+        static int RunCancelPending(CancelPendingOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            wallet.PendingSpendCancel(opts.SpendCode);
+            wallet.Save();
+            return 0;
+        }
+
+        static int RunSpend(SpendOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var feeUnit = new BigInteger(0);
+            var feeMax = new BigInteger(0);
+            setFees(wallet, ref feeUnit, ref feeMax);
+            WalletTx wtx;
+            EnsureTagExists(wallet, opts.Tag);
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out wtx);
+            Console.WriteLine(res);
+            if (wtx != null)
+                Console.WriteLine(wtx.ChainTx.TxId);
+            wallet.Save();
+            return 0;
+        }
+
+        static int RunConsolidate(ConsolidateOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -257,6 +341,7 @@ namespace test
                     .Select(m => { return m.Trim(); })
                     .ToList();
             IEnumerable<string> txids;
+            EnsureTagExists(wallet, opts.TagTo);
             var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out txids);
             Console.WriteLine(res);
             foreach (var txid in txids)
@@ -265,7 +350,7 @@ namespace test
             return 0;
         }
 
-        static int RunShowUnAckAndReturnExitCode(ShowUnAckOptions opts)
+        static int RunShowUnAck(ShowUnAckOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -279,7 +364,7 @@ namespace test
             return 0;
         }
 
-        static int RunAckAndReturnExitCode(AckOptions opts)
+        static int RunAck(AckOptions opts)
         {
             var walletType = GetWalletType(opts.Filename);
             var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
@@ -298,15 +383,21 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, NewAddrOptions, SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, NewAddrOptions,
+                PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
+                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
-                (NewOptions opts) => RunNewAndReturnExitCode(opts),
-                (ShowOptions opts) => RunShowAndReturnExitCode(opts),
-                (NewAddrOptions opts) => RunNewAddrAndReturnExitCode(opts),
-                (SpendOptions opts) => RunSpendAndReturnExitCode(opts),
-                (ConsolidateOptions opts) => RunConsolidateAndReturnExitCode(opts),
-                (ShowUnAckOptions opts) => RunShowUnAckAndReturnExitCode(opts),
-                (AckOptions opts) => RunAckAndReturnExitCode(opts),
+                (NewOptions opts) => RunNew(opts),
+                (ShowOptions opts) => RunShow(opts),
+                (NewAddrOptions opts) => RunNewAddr(opts),
+                (PendingSpendOptions opts) => RunPendingSpend(opts),
+                (ShowPendingOptions opts) => RunShowPending(opts),
+                (ActionPendingOptions opts) => RunActionPending(opts),
+                (CancelPendingOptions opts) => RunCancelPending(opts),
+                (SpendOptions opts) => RunSpend(opts),
+                (ConsolidateOptions opts) => RunConsolidate(opts),
+                (ShowUnAckOptions opts) => RunShowUnAck(opts),
+                (AckOptions opts) => RunAck(opts),
                 errs => 1);
         }
     }

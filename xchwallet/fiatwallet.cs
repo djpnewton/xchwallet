@@ -4,7 +4,6 @@ using System.Text;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
-using System.Security.Cryptography;
 using Newtonsoft.Json;
 using WavesCS;
 using Microsoft.Extensions.Logging;
@@ -26,6 +25,7 @@ namespace xchwallet
     {
         string Type();
         IEnumerable<FiatWalletTag> GetTags();
+        FiatWalletTag NewTag(string tag);
         IEnumerable<FiatWalletTx> GetTransactions(string tag);
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
         FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata);
@@ -56,23 +56,6 @@ namespace xchwallet
                 throw new Exception($"Type found in db ({type}) does not match this wallet class ({Type()})");
         }
 
-        string CreateDepositCode(int length=10, bool allowLetters=false)
-        {
-            var code = new StringBuilder();
-            var rng = new RNGCryptoServiceProvider();
-            var rnd = new byte[1];
-            int n = 0;
-            while (n < length) {
-                rng.GetBytes(rnd);
-                var c = (char)rnd[0];
-                if ((Char.IsDigit(c) || (allowLetters && Char.IsLetter(c))) && rnd[0] < 127) {
-                    ++n;
-                    code.Append(char.ToUpper(c));
-                }
-            }
-            return code.ToString();
-        }
-
         public FiatWallet(ILogger logger, FiatWalletContext db, string type, BankAccount account)
         {
             this.logger = logger;
@@ -100,6 +83,13 @@ namespace xchwallet
             return db.WalletTags;
         }
 
+        public FiatWalletTag NewTag(string tag)
+        {
+            var tag_ = new FiatWalletTag{ Tag = tag };
+            db.WalletTags.Add(tag_);
+            return tag_;
+        }
+
         public IEnumerable<FiatWalletTx> GetTransactions(string tag)
         {
             return db.TxsGet(tag);
@@ -107,10 +97,11 @@ namespace xchwallet
 
         public FiatWalletTx RegisterPendingDeposit(string tag, long amount)
         {
-            var depositCode = CreateDepositCode();
+            var depositCode = Utils.CreateDepositCode();
             while (db.TxGet(depositCode) != null)
-                depositCode = CreateDepositCode();
-            var _tag = db.TagGetOrCreate(tag);
+                depositCode = Utils.CreateDepositCode();
+            var _tag = db.TagGet(tag);
+            Util.WalletAssert(_tag != null, $"Tag '{tag}' does not exist");
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var tx = new FiatWalletTx { DepositCode=depositCode, Tag=_tag, Date=date, Direction=WalletDirection.Incomming, Amount=amount };
             db.WalletTxs.Add(tx);
@@ -135,9 +126,9 @@ namespace xchwallet
 
         public FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account)
         {
-            var depositCode = CreateDepositCode();
+            var depositCode = Utils.CreateDepositCode();
             while (db.TxGet(depositCode) != null)
-                depositCode = CreateDepositCode();
+                depositCode = Utils.CreateDepositCode();
             var _tag = db.TagGetOrCreate(tag);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var tx = new FiatWalletTx { DepositCode=depositCode, Tag=_tag, Date=date, Direction=WalletDirection.Outgoing, Amount=amount,

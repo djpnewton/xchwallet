@@ -135,6 +135,17 @@ namespace fiat
             return new FiatWallet(GetLogger(), db, walletType, account);
         }
 
+        static FiatWalletTag EnsureTagExists(IFiatWallet wallet, string tag)
+        {
+            var tags = wallet.GetTags();
+            foreach (var tag_ in tags)
+                if (tag_.Tag == tag)
+                    return tag_;
+            var tag__ = wallet.NewTag(tag);
+            wallet.Save();
+            return tag__;
+        }
+
         static int RunNewAndReturnExitCode(NewOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, opts.Type);
@@ -165,6 +176,7 @@ namespace fiat
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
+            EnsureTagExists(wallet, opts.Tag);
             Console.WriteLine(wallet.RegisterPendingDeposit(opts.Tag, opts.Amount));
             wallet.Save();
             return 0;
@@ -193,6 +205,7 @@ namespace fiat
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
+            EnsureTagExists(wallet, opts.Tag);
             var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="John Smith", AccountNumber="12-1234-1234567-12"};
             Console.WriteLine(wallet.RegisterPendingWithdrawal(opts.Tag, opts.Amount, account));
             wallet.Save();

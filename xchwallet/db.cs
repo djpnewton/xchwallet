@@ -158,6 +158,8 @@ namespace xchwallet
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
 
+        public DbSet<WalletPendingSpend> WalletPendingSpends { get; set; }
+
         public int LastPathIndex
         {
             get { return CfgGetInt("LastPathIndex", 0); }
@@ -171,18 +173,29 @@ namespace xchwallet
         {
             base.OnModelCreating(builder);
 
-            builder.Entity<ChainTx>()
-                .HasIndex(t => t.TxId)
-                .IsUnique();
-
             var bigIntConverter = new ValueConverter<BigInteger, string>(
                 v => v.ToString(),
                 v => BigInteger.Parse(v));
+
+            builder.Entity<WalletTag>()
+                .HasIndex(t => t.Tag)
+                .IsUnique();
+                
+            builder.Entity<ChainTx>()
+                .HasIndex(t => t.TxId)
+                .IsUnique();
             builder.Entity<ChainTx>()
                 .Property(t => t.Amount)
                 .HasConversion(bigIntConverter);
             builder.Entity<ChainTx>()
                 .Property(t => t.Fee)
+                .HasConversion(bigIntConverter);
+
+            builder.Entity<WalletPendingSpend>()
+                .HasIndex(t => t.SpendCode)
+                .IsUnique();
+            builder.Entity<WalletPendingSpend>()
+                .Property(s => s.Amount)
                 .HasConversion(bigIntConverter);
         }
 
@@ -191,14 +204,10 @@ namespace xchwallet
             return WalletTags.SingleOrDefault(t => t.Tag == tag);
         }
 
-        public WalletTag TagGetOrCreate(string tag)
+        public WalletTag TagCreate(string tag)
         {
-            var _tag = TagGet(tag);
-            if (_tag == null)
-            {
-                _tag = new WalletTag{ Tag = tag };
-                WalletTags.Add(_tag);
-            }
+            var _tag = new WalletTag{ Tag = tag };
+            WalletTags.Add(_tag);
             return _tag;
         }
 
@@ -217,8 +226,7 @@ namespace xchwallet
             {
                 var txs = new List<WalletTx>();
                 foreach (var addr in _tag.Addrs)
-                    if (addr != null)//Not sure why this should be needed
-                        txs.AddRange(addr.Txs);
+                    txs.AddRange(addr.Txs);
                 return txs;
             }
             return new List<WalletTx>();
@@ -245,6 +253,11 @@ namespace xchwallet
         public ChainTx ChainTxGet(string txid)
         {
             return ChainTxs.SingleOrDefault(t => t.TxId == txid);
+        }
+
+        public WalletPendingSpend PendingSpendGet(string spendCode)
+        {
+            return WalletPendingSpends.SingleOrDefault(s => s.SpendCode == spendCode);
         }
     }
 
@@ -318,7 +331,7 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"{Tag} ({Addrs.Count})";
+            return $"<{Tag} ({Addrs.Count})>";
         } 
     }
 
@@ -378,6 +391,33 @@ namespace xchwallet
         }
     }
 
+    public class WalletPendingSpend
+    {
+        public int Id { get; set; }
+
+        public int TagId { get; set; }
+        public virtual WalletTag Tag { get; set; }
+
+        public int TagChangeId { get; set; }
+        public virtual WalletTag TagChange { get; set; }
+
+        public int? WalletTxId { get; set; }
+        public virtual WalletTx Tx { get; set; }
+
+        public long Date { get; set; }
+        public string SpendCode { get; set; }
+        public PendingSpendState State { get; set; }
+        public WalletError Error { get; set; }
+        public string ErrorMessage { get; set; }
+        public string To { get; set; }
+        public BigInteger Amount { get; set; }
+        
+        public override string ToString()
+        {
+            return $"<{SpendCode} {Date} {To} {Amount} {State} {Tag} {TagChange} {Tx}>";
+        }
+    }
+
     public class FiatWalletContext : BaseContext
     {
         public DbSet<BankTx> BankTxs { get; set; }
@@ -390,6 +430,10 @@ namespace xchwallet
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            builder.Entity<WalletTag>()
+                .HasIndex(t => t.Tag)
+                .IsUnique();
 
             builder.Entity<FiatWalletTx>()
                 .HasIndex(t => t.DepositCode)

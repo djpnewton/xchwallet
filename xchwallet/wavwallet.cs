@@ -55,7 +55,8 @@ namespace xchwallet
             var nonce = db.LastPathIndex;
             db.LastPathIndex++;
             // create new address that is unused
-            var _tag = db.TagGetOrCreate(tag);
+            var _tag = db.TagGet(tag);
+            Util.WalletAssert(_tag != null, $"Tag '{tag}' does not exist");
             var acct = CreateAccount(nonce);
             var address = new WalletAddr(_tag, nonce.ToString(), nonce, acct.Address);
             // add to address list
@@ -167,7 +168,7 @@ namespace xchwallet
         public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return addr.Txs;
         }
 
@@ -182,7 +183,7 @@ namespace xchwallet
         public override BigInteger GetAddrBalance(string address)
         {
             var addr = db.AddrGet(address);
-            System.Diagnostics.Debug.Assert(addr != null);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
             return GetAddrBalance(addr);
         }
 
@@ -198,6 +199,32 @@ namespace xchwallet
                     total -= tx.ChainTx.Fee;
                 }
             return total;
+        }
+
+        WalletError CreateSpendTx(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
+            out Tuple<string, TransferTransaction> signedSpendTx)
+        {
+            signedSpendTx = null;
+            if (fee > feeMax)
+                return WalletError.MaxFeeBreached;
+            foreach (var acct in candidates)
+            {
+                // get balance for the account
+                var balance = GetAddrBalance(acct.Address);
+                // if the balance is greater then the fee we can use this account
+                if (balance > fee + amount)
+                {
+                    // create signed transaction
+                    var account = CreateAccount(Int32.Parse(acct.Path));
+                    var amountDecimal = asset.BigIntToAmount(amount);
+                    var feeDecimal = asset.BigIntToAmount(fee);
+                    var tx = new TransferTransaction(account.PublicKey, to, asset, amountDecimal, feeDecimal, feeAsset);
+                    tx.Sign(account);
+                    signedSpendTx = new Tuple<string, TransferTransaction>(acct.Address, tx);
+                    return WalletError.Success;
+                }
+            }
+            return WalletError.InsufficientFunds;
         }
 
         WalletError CreateSpendTxs(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
@@ -242,7 +269,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        void AddOutgoingTx(string from, TransferTransaction signedTx)
+        WalletTx AddOutgoingTx(string from, TransferTransaction signedTx)
         {
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var address = db.AddrGet(from);
@@ -255,35 +282,32 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
         {
-            txids = new List<string>();
+            wtx = null;
             // create spend transaction from accounts
             var accts = GetAddresses(tag);
-            List<Tuple<string, TransferTransaction>> signedSpendTxs;
-            var res = CreateSpendTxs(accts, to, amount, feeUnit, feeMax, out signedSpendTxs);
+            Tuple<string, TransferTransaction> signedSpendTx;
+            var res = CreateSpendTx(accts, to, amount, feeUnit, feeMax, out signedSpendTx);
             if (res == WalletError.Success)
             {
-                // send each raw signed transaction and get the txid
-                foreach (var tx in signedSpendTxs)
+                // send the raw signed transaction and get the txid
+                try
                 {
-                    try
-                    {
-                        var output = node.Broadcast(tx.Item2);
-                        logger.LogDebug(output);
-                    }
-                    catch (System.Net.WebException ex)
-                    {
-                        logger.LogError("{0}", ex);
-                        return WalletError.PartialBroadcast;
-                    }
-                    var txid = tx.Item2.GenerateId();
-                    ((List<string>)txids).Add(txid);
-                    // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2);
+                    var output = node.Broadcast(signedSpendTx.Item2);
+                    logger.LogDebug(output);
+                    var txid = signedSpendTx.Item2.GenerateId();
                 }
+                catch (System.Net.WebException ex)
+                {
+                    logger.LogError("{0}", ex);
+                    return WalletError.FailedBroadcast;
+                }
+                // add to wallet data
+                wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2);
             }
             return res;
         }

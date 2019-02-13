@@ -37,6 +37,18 @@ namespace xchwallet
                 return db.CfgGetBool(MAINNET_KEY, false);
             return null;
         }
+
+        public static void WalletAssert(bool value, string msg)
+        {
+            if (!value)
+                throw new WalletException(msg);
+        }
+    }
+
+    public class WalletException : Exception
+    {
+        public WalletException(string msg) : base(msg)
+        { }
     }
 
     public enum WalletDirection
@@ -53,11 +65,20 @@ namespace xchwallet
         PartialBroadcast, // A wallet which might require multiple transactions might return this error
     }
 
+    public enum PendingSpendState
+    {
+        Pending,
+        Complete,
+        Cancelled,
+        Error
+    }
+
     public interface IWallet
     {
         string Type();
         bool IsMainnet();
         IEnumerable<WalletTag> GetTags();
+        WalletTag NewTag(string tag);
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
         void UpdateFromBlockchain();
@@ -66,8 +87,12 @@ namespace xchwallet
         IEnumerable<WalletTx> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
+        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount);
+        WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx);
+        void PendingSpendCancel(string spendCode);
+        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
-        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
+        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
@@ -95,7 +120,7 @@ namespace xchwallet
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag);
         public abstract BigInteger GetAddrBalance(string address);
-        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
+        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract string AmountToString(BigInteger value);
         public abstract BigInteger StringToAmount(string value);
@@ -172,6 +197,13 @@ namespace xchwallet
             return db.WalletTags;
         }
 
+        public WalletTag NewTag(string tag)
+        {
+            var tag_ = new WalletTag{ Tag = tag };
+            db.WalletTags.Add(tag_);
+            return tag_;
+        }
+
         public WalletAddr NewOrUnusedAddress(string tag)
         {
             foreach (var addr in GetAddresses(tag))
@@ -186,6 +218,64 @@ namespace xchwallet
         public IEnumerable<WalletAddr> GetAddresses(string tag)
         {
             return db.AddrsGet(tag);
+        }
+
+        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount)
+        {
+            if (!ValidateAddress(to))
+                return null;
+            var spendCode = Utils.CreateDepositCode(allowLetters: true);
+            while (db.PendingSpendGet(spendCode) != null)
+                spendCode = Utils.CreateDepositCode(allowLetters: true);
+            var tag_ = db.TagGet(tag);
+            Util.WalletAssert(tag_ != null, $"Tag '{tag}' does not exist");
+            var tagChange_ = db.TagGet(tagChange);
+            Util.WalletAssert(tagChange_ != null, $"Tag '{tagChange}' does not exist");
+            var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var spend = new WalletPendingSpend{ SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
+            db.WalletPendingSpends.Add(spend);
+            return spend;
+        }
+
+        public WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx)
+        {
+            var spend = db.PendingSpendGet(spendCode);
+            Util.WalletAssert(spend != null, $"SpendCode '{spendCode}' does not exist");
+            Util.WalletAssert(spend.State == PendingSpendState.Pending || spend.State == PendingSpendState.Error, "PendingSpend has wrong state to action");
+            logger.LogDebug($"Actioning pending spend: {spendCode}, from tag: {spend.Tag.Tag}, to: {spend.To}, amount: {spend.Amount}");
+            var err = Spend(spend.Tag.Tag, spend.TagChange.Tag, spend.To, spend.Amount, feeMax, feeUnit, out tx);
+            if (err == WalletError.Success)
+            {
+                spend.State = PendingSpendState.Complete;
+                spend.Tx = tx;
+            }
+            else
+            {
+                spend.State = PendingSpendState.Error;
+                spend.Error = err;
+            }
+            db.WalletPendingSpends.Update(spend);
+            return err;
+        }
+
+        public void PendingSpendCancel(string spendCode)
+        {
+            var spend = db.PendingSpendGet(spendCode);
+            Util.WalletAssert(spend != null, $"SpendCode '{spendCode}' does not exist");
+            Util.WalletAssert(spend.State == PendingSpendState.Pending || spend.State == PendingSpendState.Error, "PendingSpend has wrong state to cancel");
+            spend.State = PendingSpendState.Cancelled;
+            db.WalletPendingSpends.Update(spend);
+        }
+
+        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null)
+        {
+            var tag_ = db.TagGet(tag);
+            if (tag_ == null)
+                return new List<WalletPendingSpend>();
+            var q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id);
+            if (states != null)
+                q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id && states.Contains(s.State));
+            return q;
         }
 
         public IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address)
