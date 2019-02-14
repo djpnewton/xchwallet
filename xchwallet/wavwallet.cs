@@ -211,8 +211,9 @@ namespace xchwallet
             {
                 // get balance for the account
                 var balance = GetAddrBalance(acct.Address);
+                logger.LogDebug($"balance {balance}, amount: {amount}, amount + fee: {amount + fee}");
                 // if the balance is greater then the fee we can use this account
-                if (balance > fee + amount)
+                if (balance >= fee + amount)
                 {
                     // create signed transaction
                     var account = CreateAccount(Int32.Parse(acct.Path));
