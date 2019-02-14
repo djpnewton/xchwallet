@@ -144,6 +144,7 @@ namespace xchwallet
                 {
                     wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
                     db.WalletTxs.Add(wtx);
+                    db.WalletTxAddMeta(wtx);
                 }
             }
         }
@@ -258,7 +259,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        WalletTx AddOutgoingTx(string from, string signedTx)
+        WalletTx AddOutgoingTx(string from, string signedTx, WalletTxMeta meta)
         {
             var address = db.AddrGet(from);
             var tx = new Transaction(signedTx.HexToByteArray());
@@ -270,10 +271,14 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            if (meta != null)
+                wtx.Meta = meta;
+            else
+                db.WalletTxAddMeta(wtx);
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null)
         {
             wtx = null;
             // get gas price
@@ -295,7 +300,7 @@ namespace xchwallet
                     sendTxTask.Wait();
                     var txid = sendTxTask.Result;
                     // add to wallet data
-                    wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2);
+                    wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
                 }
                 catch (Exception ex)
                 {
@@ -340,7 +345,7 @@ namespace xchwallet
                         return WalletError.PartialBroadcast;
                     }
                     // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2);
+                    AddOutgoingTx(tx.Item1, tx.Item2, null);
                 }
             }
             return res;

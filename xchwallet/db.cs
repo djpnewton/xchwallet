@@ -157,8 +157,8 @@ namespace xchwallet
         public DbSet<WalletTag> WalletTags { get; set; }
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
-
         public DbSet<WalletPendingSpend> WalletPendingSpends { get; set; }
+        public DbSet<WalletTxMeta> WalletTxMetas { get; set; }
 
         public int LastPathIndex
         {
@@ -258,6 +258,16 @@ namespace xchwallet
         public WalletPendingSpend PendingSpendGet(string spendCode)
         {
             return WalletPendingSpends.SingleOrDefault(s => s.SpendCode == spendCode);
+        }
+
+        public WalletTxMeta WalletTxAddMeta(WalletTx wtx)
+        {
+            if (wtx.Meta != null)
+                throw new WalletException("WalletTx already has a Meta field");
+            var meta = new WalletTxMeta();
+            wtx.Meta = meta;
+            WalletTxMetas.Add(meta);
+            return meta;
         }
     }
 
@@ -381,13 +391,26 @@ namespace xchwallet
 
         public WalletDirection Direction { get; set; }
         public bool Acknowledged { get; set; }
+
+        public int WalletTxMetaId { get; set; }
+        public virtual WalletTxMeta Meta { get; set; }
+        
+        public override string ToString()
+        {
+            return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Meta?.Id} {Meta?.Note} {Meta?.TagOnBehalfOf}>";
+        }
+    }
+
+    public class WalletTxMeta
+    {
+        public int Id { get; set; }
+
         public string Note { get; set; }
-        public long WalletId { get; set; }
         public string TagOnBehalfOf { get; set; }
         
         public override string ToString()
         {
-            return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Note} {WalletId} {TagOnBehalfOf}>";
+            return $"<{Id} '{Note}' '{TagOnBehalfOf}'>";
         }
     }
 
@@ -411,6 +434,9 @@ namespace xchwallet
         public string ErrorMessage { get; set; }
         public string To { get; set; }
         public BigInteger Amount { get; set; }
+
+        public int WalletTxMetaId { get; set; }
+        public virtual WalletTxMeta Meta { get; set; }
         
         public override string ToString()
         {

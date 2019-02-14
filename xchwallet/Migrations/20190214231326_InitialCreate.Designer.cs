@@ -9,7 +9,7 @@ using xchwallet;
 namespace xchwallet.Migrations
 {
     [DbContext(typeof(WalletContext))]
-    [Migration("20190213044236_InitialCreate")]
+    [Migration("20190214231326_InitialCreate")]
     partial class InitialCreate
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -114,6 +114,8 @@ namespace xchwallet.Migrations
 
                     b.Property<int?>("WalletTxId");
 
+                    b.Property<int>("WalletTxMetaId");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SpendCode")
@@ -124,6 +126,8 @@ namespace xchwallet.Migrations
                     b.HasIndex("TagId");
 
                     b.HasIndex("WalletTxId");
+
+                    b.HasIndex("WalletTxMetaId");
 
                     b.ToTable("WalletPendingSpends");
                 });
@@ -154,13 +158,9 @@ namespace xchwallet.Migrations
 
                     b.Property<int>("Direction");
 
-                    b.Property<string>("Note");
-
-                    b.Property<string>("TagOnBehalfOf");
-
                     b.Property<int>("WalletAddrId");
 
-                    b.Property<long>("WalletId");
+                    b.Property<int>("WalletTxMetaId");
 
                     b.HasKey("Id");
 
@@ -168,7 +168,23 @@ namespace xchwallet.Migrations
 
                     b.HasIndex("WalletAddrId");
 
+                    b.HasIndex("WalletTxMetaId");
+
                     b.ToTable("WalletTxs");
+                });
+
+            modelBuilder.Entity("xchwallet.WalletTxMeta", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<string>("Note");
+
+                    b.Property<string>("TagOnBehalfOf");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("WalletTxMetas");
                 });
 
             modelBuilder.Entity("xchwallet.WalletAddr", b =>
@@ -194,6 +210,11 @@ namespace xchwallet.Migrations
                     b.HasOne("xchwallet.WalletTx", "Tx")
                         .WithMany()
                         .HasForeignKey("WalletTxId");
+
+                    b.HasOne("xchwallet.WalletTxMeta", "Meta")
+                        .WithMany()
+                        .HasForeignKey("WalletTxMetaId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("xchwallet.WalletTx", b =>
@@ -206,6 +227,11 @@ namespace xchwallet.Migrations
                     b.HasOne("xchwallet.WalletAddr", "Address")
                         .WithMany("Txs")
                         .HasForeignKey("WalletAddrId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("xchwallet.WalletTxMeta", "Meta")
+                        .WithMany()
+                        .HasForeignKey("WalletTxMetaId")
                         .OnDelete(DeleteBehavior.Cascade);
                 });
 #pragma warning restore 612, 618

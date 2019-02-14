@@ -149,6 +149,7 @@ namespace xchwallet
                                 else
                                     wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing, Acknowledged=false };
                                 db.WalletTxs.Add(wtx);
+                                db.WalletTxAddMeta(wtx);
                             }
 
                             // record the transactions we have processed already
@@ -270,7 +271,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        WalletTx AddOutgoingTx(string from, TransferTransaction signedTx)
+        WalletTx AddOutgoingTx(string from, TransferTransaction signedTx, WalletTxMeta meta)
         {
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var address = db.AddrGet(from);
@@ -283,10 +284,14 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            if (meta != null)
+                wtx.Meta = meta;
+            else
+                db.WalletTxAddMeta(wtx);
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null)
         {
             wtx = null;
             // create spend transaction from accounts
@@ -308,7 +313,7 @@ namespace xchwallet
                     return WalletError.FailedBroadcast;
                 }
                 // add to wallet data
-                wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2);
+                wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
             }
             return res;
         }
@@ -345,7 +350,7 @@ namespace xchwallet
                     var txid = tx.Item2.GenerateId();
                     ((List<string>)txids).Add(txid);
                     // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2);
+                    AddOutgoingTx(tx.Item1, tx.Item2, null);
                 }
             }
             return res;

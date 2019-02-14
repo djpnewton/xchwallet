@@ -93,18 +93,13 @@ namespace xchwallet
         void PendingSpendCancel(string spendCode);
         IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
-        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx);
+        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
-        void AddNote(string tag, IEnumerable<string> txids, string note);
-        void AddNote(string tag, string txid, string note);
-        void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf);
-        void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf);
-        void SetTxWalletId(string tag, IEnumerable<string> txids, long id);
-        void SetTxWalletId(string tag, string txid, long id);
-        long GetNextTxWalletId(string tag);
+        void AddNote(string tag, WalletTx wtx, string note);
+        void SetTagOnBehalfOf(string tag, WalletTx txid, string tagOnBehalfOf);
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
@@ -121,7 +116,7 @@ namespace xchwallet
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag);
         public abstract BigInteger GetAddrBalance(string address);
-        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx);
+        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
         public abstract string AmountToString(BigInteger value);
         public abstract BigInteger StringToAmount(string value);
@@ -242,6 +237,8 @@ namespace xchwallet
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var spend = new WalletPendingSpend{ SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
             db.WalletPendingSpends.Add(spend);
+            spend.Meta = new WalletTxMeta();
+            db.WalletTxMetas.Add(spend.Meta);
             return spend;
         }
 
@@ -251,7 +248,7 @@ namespace xchwallet
             Util.WalletAssert(spend != null, $"SpendCode '{spendCode}' does not exist");
             Util.WalletAssert(spend.State == PendingSpendState.Pending || spend.State == PendingSpendState.Error, "PendingSpend has wrong state to action");
             logger.LogDebug($"Actioning pending spend: {spendCode}, from tag: {spend.Tag.Tag}, to: {spend.To}, amount: {spend.Amount}");
-            var err = Spend(spend.Tag.Tag, spend.TagChange.Tag, spend.To, spend.Amount, feeMax, feeUnit, out tx);
+            var err = Spend(spend.Tag.Tag, spend.TagChange.Tag, spend.To, spend.Amount, feeMax, feeUnit, out tx, spend.Meta);
             if (err == WalletError.Success)
             {
                 spend.State = PendingSpendState.Complete;
@@ -309,76 +306,16 @@ namespace xchwallet
             db.WalletTxs.UpdateRange(txs);
         }
 
-        public void AddNote(string tag, IEnumerable<string> txids, string note)
+        public void AddNote(string tag, WalletTx wtx, string note)
         {
-            foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.ChainTx.TxId))
-                {
-                    tx.Note = note;
-                    db.WalletTxs.Update(tx);
-                }
+            wtx.Meta.Note = note;
+            db.WalletTxs.Update(wtx);
         }
 
-        public void AddNote(string tag, string txid, string note)
+        public void SetTagOnBehalfOf(string tag, WalletTx wtx, string tagOnBehalfOf)
         {
-            foreach (var tx in GetTransactions(tag))
-                if (tx.ChainTx.TxId == txid)
-                {
-                    tx.Note = note;
-                    db.WalletTxs.Update(tx);
-                    break;
-                }
-        }
-
-        public void SetTagOnBehalfOf(string tag, IEnumerable<string> txids, string tagOnBehalfOf)
-        {
-            foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.ChainTx.TxId))
-                {
-                    tx.TagOnBehalfOf = tagOnBehalfOf;
-                    db.WalletTxs.Update(tx);
-                }
-        }
-
-        public void SetTagOnBehalfOf(string tag, string txid, string tagOnBehalfOf)
-        {
-            foreach (var tx in GetTransactions(tagOnBehalfOf))
-                if (tx.ChainTx.TxId == txid)
-                {
-                    tx.TagOnBehalfOf = tagOnBehalfOf;
-                    db.WalletTxs.Update(tx);
-                    break;
-                }
-        }
-
-        public void SetTxWalletId(string tag, IEnumerable<string> txids, long id)
-        {
-            foreach (var tx in GetTransactions(tag))
-                if (txids.Contains(tx.ChainTx.TxId))
-                {
-                    tx.WalletId = id;
-                    db.WalletTxs.Update(tx);
-                }
-        }
-
-        public void SetTxWalletId(string tag, string txid, long id)
-        {
-            foreach (var tx in GetTransactions(tag))
-                if (tx.ChainTx.TxId == txid)
-                {
-                    tx.WalletId = id;
-                    db.WalletTxs.Update(tx);
-                    break;
-                }
-        }
-                
-        public long GetNextTxWalletId(string tag)
-        {
-            long res = 0;
-            foreach (var tx in GetTransactions(tag))
-                if (tx.WalletId > res)
-                    res = tx.WalletId;
-            return res + 1;
+            wtx.Meta.TagOnBehalfOf = tagOnBehalfOf;
+            db.WalletTxs.Update(wtx);
         }
     }
 }

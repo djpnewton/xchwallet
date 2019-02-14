@@ -102,6 +102,7 @@ namespace xchwallet
             {
                 wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
                 db.WalletTxs.Add(wtx);
+                db.WalletTxAddMeta(wtx);
             }
         }
 
@@ -171,7 +172,7 @@ namespace xchwallet
             return addr;
         }
 
-        WalletTx AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee)
+        WalletTx AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee, WalletTxMeta meta)
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -179,6 +180,10 @@ namespace xchwallet
             db.ChainTxs.Add(ctx);
             var wtx = new WalletTx{ChainTx=ctx, Address=from, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
+            if (meta != null)
+                wtx.Meta = meta;
+            else
+                db.WalletTxAddMeta(wtx);
             return wtx;
         }
 
@@ -191,7 +196,7 @@ namespace xchwallet
             return tx.GetFeeRate(coins.ToArray());
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta = null)
         {
             wtx = null;
             var tagChange_ = db.TagGet(tagChange);
@@ -264,7 +269,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi);
+                wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi, meta);
                 return WalletError.Success;
             }
             else
@@ -345,7 +350,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi);
+                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi, null);
                 ((List<string>)txids).Add(tx.GetHash().ToString());
                 return WalletError.Success;
             }
