@@ -311,7 +311,7 @@ namespace xchwallet
             BigInteger gasPrice = feeUnit;
 
             txids = new List<string>();
-            var to = NewOrUnusedAddress(tagTo);
+            var to = NewOrExistingAddress(tagTo);
             BigInteger balance = 0;
             var accts = new List<WalletAddr>();
             foreach (var tag in tagFrom)

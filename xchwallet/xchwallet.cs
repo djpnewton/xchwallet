@@ -81,6 +81,7 @@ namespace xchwallet
         WalletTag NewTag(string tag);
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
+        WalletAddr NewOrExistingAddress(string tag);
         void UpdateFromBlockchain();
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletTx> GetTransactions(string tag);
@@ -212,6 +213,13 @@ namespace xchwallet
                 if (!txs.Any())
                     return addr;
             }
+            return NewAddress(tag);
+        }
+
+        public WalletAddr NewOrExistingAddress(string tag)
+        {
+            foreach (var addr in GetAddresses(tag))
+                return addr;
             return NewAddress(tag);
         }
 
