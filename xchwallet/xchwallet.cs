@@ -78,6 +78,7 @@ namespace xchwallet
         string Type();
         bool IsMainnet();
         IEnumerable<WalletTag> GetTags();
+        bool HasTag(string tag);
         WalletTag NewTag(string tag);
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
@@ -192,6 +193,11 @@ namespace xchwallet
         public IEnumerable<WalletTag> GetTags()
         {
             return db.WalletTags;
+        }
+
+        public bool HasTag(string tag)
+        {
+            return db.WalletTags.Any(t => t.Tag == tag);
         }
 
         public WalletTag NewTag(string tag)
