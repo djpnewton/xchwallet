@@ -92,7 +92,7 @@ namespace xchwallet
         WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx);
         void PendingSpendCancel(string spendCode);
-        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null);
+        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids);
@@ -279,15 +279,25 @@ namespace xchwallet
             db.WalletPendingSpends.Update(spend);
         }
 
-        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null)
+        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null)
         {
-            var tag_ = db.TagGet(tag);
-            if (tag_ == null)
-                return new List<WalletPendingSpend>();
-            var q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id);
-            if (states != null)
-                q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id && states.Contains(s.State));
-            return q;
+            if (tag != null)
+            {
+                var tag_ = db.TagGet(tag);
+                if (tag_ == null)
+                    return new List<WalletPendingSpend>();
+                var q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id);
+                if (states != null)
+                    q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id && states.Contains(s.State));
+                return q;
+            }
+            else
+            {
+                if (states != null)
+                    return db.WalletPendingSpends.Where(s => states.Contains(s.State));
+                else
+                    return db.WalletPendingSpends;
+            }
         }
 
         public IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address)
