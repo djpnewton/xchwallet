@@ -89,7 +89,7 @@ namespace xchwallet
         IEnumerable<WalletTx> GetAddrTransactions(string address);
         BigInteger GetBalance(string tag);
         BigInteger GetAddrBalance(string address);
-        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount);
+        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx);
         void PendingSpendCancel(string spendCode);
         IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag, IEnumerable<PendingSpendState> states = null);
@@ -230,7 +230,7 @@ namespace xchwallet
             return db.AddrsGet(tag);
         }
 
-        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount)
+        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null)
         {
             if (!ValidateAddress(to))
                 return null;
@@ -244,7 +244,7 @@ namespace xchwallet
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var spend = new WalletPendingSpend{ SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
             db.WalletPendingSpends.Add(spend);
-            spend.Meta = new WalletTxMeta();
+            spend.Meta = new WalletTxMeta() {TagOnBehalfOf=tagOnBehalfOf};
             db.WalletTxMetas.Add(spend.Meta);
             return spend;
         }
