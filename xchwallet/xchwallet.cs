@@ -99,7 +99,8 @@ namespace xchwallet
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
         void AddNote(string tag, WalletTx wtx, string note);
-        void SetTagOnBehalfOf(string tag, WalletTx txid, string tagOnBehalfOf);
+        void SetTagOnBehalfOf(string tag, WalletTx wtx, string tagOnBehalfOf);
+        void SetTagOnBehalfOf(string tag, WalletPendingSpend spend, string tagOnBehalfOf);
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
@@ -316,6 +317,12 @@ namespace xchwallet
         {
             wtx.Meta.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletTxs.Update(wtx);
+        }
+
+        public void SetTagOnBehalfOf(string tag, WalletPendingSpend spend, string tagOnBehalfOf)
+        {
+            spend.Meta.TagOnBehalfOf = tagOnBehalfOf;
+            db.WalletPendingSpends.Update(spend);
         }
     }
 }
