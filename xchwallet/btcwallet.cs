@@ -73,7 +73,7 @@ namespace xchwallet
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
             var id = utxo.Outpoint.Hash.ToString();
             var date = utxo.Timestamp.ToUnixTimeSeconds();
-            var height = confirmed ? currentHeight - utxo.Confirmations : -1;
+            var height = confirmed ? currentHeight - (utxo.Confirmations-1) : -1;
 
             logger.LogInformation($"processing UTXO - txid {id} - destination addr {to}");
 
