@@ -318,9 +318,9 @@ namespace xchwallet
             return res;
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs)
         {
-            txids = new List<string>();
+            wtxs = new List<WalletTx>();
             var to = NewOrExistingAddress(tagTo);
             BigInteger balance = 0;
             var accts = new List<WalletAddr>();
@@ -347,10 +347,9 @@ namespace xchwallet
                         logger.LogError("{0}", ex);
                         return WalletError.PartialBroadcast;
                     }
-                    var txid = tx.Item2.GenerateId();
-                    ((List<string>)txids).Add(txid);
                     // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2, null);
+                    var wtx = AddOutgoingTx(tx.Item1, tx.Item2, null);
+                    ((List<WalletTx>)wtxs).Add(wtx);
                 }
             }
             return res;

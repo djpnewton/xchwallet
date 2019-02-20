@@ -340,12 +340,12 @@ namespace test
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            IEnumerable<string> txids;
+            IEnumerable<WalletTx> wtxs;
             EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out txids);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs);
             Console.WriteLine(res);
-            foreach (var txid in txids)
-                Console.WriteLine(txid);
+            foreach (var wtx in wtxs)
+                Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
         }

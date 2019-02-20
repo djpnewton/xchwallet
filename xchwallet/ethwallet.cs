@@ -311,11 +311,11 @@ namespace xchwallet
             return res;
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs)
         {
             BigInteger gasPrice = feeUnit;
 
-            txids = new List<string>();
+            wtxs = new List<WalletTx>();
             var to = NewOrExistingAddress(tagTo);
             BigInteger balance = 0;
             var accts = new List<WalletAddr>();
@@ -337,7 +337,6 @@ namespace xchwallet
                         var sendTxTask = web3.Eth.Transactions.SendRawTransaction.SendRequestAsync(tx.Item2);
                         sendTxTask.Wait();
                         var txid = sendTxTask.Result;
-                        ((List<string>)txids).Add(txid);
                     }
                     catch (Exception ex)
                     {
@@ -345,7 +344,8 @@ namespace xchwallet
                         return WalletError.PartialBroadcast;
                     }
                     // add to wallet data
-                    AddOutgoingTx(tx.Item1, tx.Item2, null);
+                    var wtx = AddOutgoingTx(tx.Item1, tx.Item2, null);
+                    ((List<WalletTx>)wtxs).Add(wtx);
                 }
             }
             return res;

@@ -279,9 +279,9 @@ namespace xchwallet
             }
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<string> txids)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs)
         {
-            txids = new List<string>();
+            wtxs = new List<WalletTx>();
             // generate new address to send to
             var to = NewOrUnusedAddress(tagTo);
             // calc amount in tagFrom
@@ -350,8 +350,8 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi, null);
-                ((List<string>)txids).Add(tx.GetHash().ToString());
+                var wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi, null);
+                ((List<WalletTx>)wtxs).Add(wtx);
                 return WalletError.Success;
             }
             else
