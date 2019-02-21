@@ -6,6 +6,7 @@ using System.Linq;
 using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
+using NBXplorer.Models;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
 
@@ -23,12 +24,17 @@ namespace xchwallet
         readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
 
+        Network GetNetwork()
+        {
+            return IsMainnet() ? Network.Main : Network.TestNet; 
+        }
+
         public BtcWallet(ILogger logger, WalletContext db, bool mainnet, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db, mainnet)
         {
             this.logger = logger;
 
             // create extended key
-            var network = mainnet ? Network.Main : Network.TestNet;
+            var network = GetNetwork();
             key = new BitcoinExtKey(new ExtKey(seedHex), network);
             var strpubkey = $"{key.Neuter().ToString()}";
             if (useLegacyAddrs)
@@ -109,6 +115,7 @@ namespace xchwallet
         public override void UpdateFromBlockchain()
         {
             UpdateTxs();
+            UpdateTxConfirmations(pubkey);
         }
 
         private void UpdateTxs()
@@ -118,6 +125,33 @@ namespace xchwallet
                 processUtxo(item, utxos.CurrentHeight, false);
             foreach (var item in utxos.Confirmed.UTXOs)
                 processUtxo(item, utxos.CurrentHeight, true);
+        }
+
+        private void UpdateTxConfirmations(GetTransactionsResponse txs)
+        {
+            foreach (var tx in txs.ConfirmedTransactions.Transactions)
+            {
+                var ctx = db.ChainTxGet(tx.TransactionId.ToString());
+                if (ctx != null && ctx.Confirmations != tx.Confirmations)
+                {
+                    ctx.Confirmations = tx.Confirmations;
+                    db.ChainTxs.Update(ctx);
+                }
+            }
+        }
+
+        private void UpdateTxConfirmations(WalletAddr addr)
+        {
+            var baddr = BitcoinAddress.Create(addr.Address, GetNetwork());
+            var trackedSource = TrackedSource.Create(baddr);
+            var txs = client.GetTransactions(trackedSource);
+            UpdateTxConfirmations(txs);
+        }
+
+        private void UpdateTxConfirmations(DerivationStrategyBase derivationStrat)
+        {
+            var txs = client.GetTransactions(derivationStrat);
+            UpdateTxConfirmations(txs);
         }
 
         public override IEnumerable<WalletTx> GetTransactions(string tag)
