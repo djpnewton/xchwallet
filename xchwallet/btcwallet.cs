@@ -166,33 +166,19 @@ namespace xchwallet
             return addr.Txs;
         }
 
-        public override BigInteger GetBalance(string tag)
+        public override BigInteger GetBalance(string tag, int minConfs=0)
         {
             BigInteger total = 0;
             foreach (var addr in db.AddrsGet(tag))
-                total += GetAddrBalance(addr);
+                total += GetAddrBalance(addr, minConfs);
             return total;
         }
 
-        public override BigInteger GetAddrBalance(string address)
+        public override BigInteger GetAddrBalance(string address, int minConfs=0)
         {
             var addr = db.AddrGet(address);
             Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return GetAddrBalance(addr);
-        }
-
-        public BigInteger GetAddrBalance(WalletAddr addr)
-        {
-            BigInteger total = 0;
-            foreach (var tx in addr.Txs)
-                if (tx.Direction == WalletDirection.Incomming)
-                    total += tx.ChainTx.Amount;
-                else if (tx.Direction == WalletDirection.Outgoing)
-                {
-                    total -= tx.ChainTx.Amount;
-                    total -= tx.ChainTx.Fee;
-                }
-            return total;
+            return GetAddrBalance(addr, minConfs);
         }
 
         public BitcoinAddress AddChangeAddress(WalletTag tag)
@@ -313,7 +299,7 @@ namespace xchwallet
             }
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0)
         {
             wtxs = new List<WalletTx>();
             // generate new address to send to
@@ -339,6 +325,8 @@ namespace xchwallet
                     foreach (var addr in addrs)
                         if (addrStr == addr.Address)
                         {
+                            if (minConfs > 0 && utxo.Confirmations < minConfs)
+                                continue;
                             candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
                             break;
                         }

@@ -87,15 +87,16 @@ namespace xchwallet
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletTx> GetTransactions(string tag);
         IEnumerable<WalletTx> GetAddrTransactions(string address);
-        BigInteger GetBalance(string tag);
-        BigInteger GetAddrBalance(string address);
+        BigInteger GetBalance(string tag, int minConfs=0);
+        BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
+        BigInteger GetAddrBalance(string address, int minConfs=0);
         WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx);
         void PendingSpendCancel(string spendCode);
         IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
-        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> txs);
+        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wxs, int minConfs=0);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
@@ -116,10 +117,10 @@ namespace xchwallet
         public abstract void UpdateFromBlockchain();
         public abstract IEnumerable<WalletTx> GetTransactions(string tag);
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
-        public abstract BigInteger GetBalance(string tag);
-        public abstract BigInteger GetAddrBalance(string address);
+        public abstract BigInteger GetBalance(string tag, int minConfs=0);
+        public abstract BigInteger GetAddrBalance(string address, int minConfs=0);
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
-        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs);
+        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0);
         public abstract string AmountToString(BigInteger value);
         public abstract BigInteger StringToAmount(string value);
         public abstract bool ValidateAddress(string address);
@@ -228,6 +229,32 @@ namespace xchwallet
         public IEnumerable<WalletAddr> GetAddresses(string tag)
         {
             return db.AddrsGet(tag);
+        }
+
+        public BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0)
+        {
+            BigInteger amount = 0;
+            foreach (var tag in tags)
+                amount += this.GetBalance(tag, minConfs);
+            return amount;
+        }
+
+        public BigInteger GetAddrBalance(WalletAddr addr, int minConfs=0)
+        {
+            BigInteger total = 0;
+            foreach (var tx in addr.Txs)
+            {
+                if (minConfs > 0 && tx.ChainTx.Confirmations < minConfs)
+                    continue;
+                if (tx.Direction == WalletDirection.Incomming)
+                    total += tx.ChainTx.Amount;
+                else if (tx.Direction == WalletDirection.Outgoing)
+                {
+                    total -= tx.ChainTx.Amount;
+                    total -= tx.ChainTx.Fee;
+                }
+            }
+            return total;
         }
 
         public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null)

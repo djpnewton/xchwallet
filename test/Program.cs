@@ -30,7 +30,10 @@ namespace test
 
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions : CommonOptions
-        { }
+        {
+            [Option('c', "confirmations", Default = 0, HelpText = "Minimum number of confirmations (default: 0)")]
+            public int MinimumConfirmations { get; set; } 
+        }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
         class NewAddrOptions : CommonOptions
@@ -112,7 +115,7 @@ namespace test
             return _logger;
         }
 
-        static void PrintWallet(IWallet wallet)
+        static void PrintWallet(IWallet wallet, int minConfs)
         {
             wallet.UpdateFromBlockchain();
 
@@ -127,8 +130,9 @@ namespace test
                 Console.WriteLine("  txs:");
                 var txs = wallet.GetTransactions(tag.Tag);
                 foreach (var tx in txs)
-                    Console.WriteLine($"    {tx}");
-                var balance = wallet.GetBalance(tag.Tag);
+                    if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
+                        Console.WriteLine($"    {tx}");
+                var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             }
         }
@@ -187,7 +191,7 @@ namespace test
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
             }
-            PrintWallet(wallet);
+            PrintWallet(wallet, opts.MinimumConfirmations);
             wallet.Save();
             return 0;
         }
