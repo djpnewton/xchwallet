@@ -63,6 +63,7 @@ namespace xchwallet
         InsufficientFunds,
         FailedBroadcast, // A wallet which can compete an operation with a single transaction might return this error when trying to broadcast it
         PartialBroadcast, // A wallet which might require multiple transactions might return this error
+        Cancelled,
     }
 
     public enum PendingSpendState

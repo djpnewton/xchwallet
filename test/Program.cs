@@ -202,6 +202,15 @@ namespace test
             return tag__;
         }
 
+        static IWallet OpenWallet(CommonOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+            return wallet;
+        }
+
         static int RunNew(NewOptions opts)
         {
             var wallet = CreateWallet(opts.Filename, opts.Type, opts.ShowSql);
@@ -211,13 +220,9 @@ namespace test
 
         static int RunShow(ShowOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             PrintWallet(wallet, opts.MinimumConfirmations);
             wallet.Save();
             return 0;
@@ -225,13 +230,9 @@ namespace test
 
         static int RunBalance(BalanceOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var tagList = opts.Tags.Split(',')
                 .Select(m => { return m.Trim(); })
                 .ToList();
@@ -242,13 +243,9 @@ namespace test
 
         static int RunBalanceExclude(BalanceExcludeOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var tagList = wallet.GetTags().Where(t => t.Tag != opts.TagExclude).Select(t => t.Tag);
             var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
             Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
@@ -257,13 +254,9 @@ namespace test
 
         static int RunNewAddr(NewAddrOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             EnsureTagExists(wallet, opts.Tag);
             Console.WriteLine(wallet.NewAddress(opts.Tag));
             wallet.Save();
@@ -302,13 +295,9 @@ namespace test
 
         static int RunPendingSpend(PendingSpendOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             EnsureTagExists(wallet, opts.Tag);
             var spend = wallet.RegisterPendingSpend(opts.Tag, opts.Tag, opts.To, opts.Amount);
             Console.WriteLine(spend);
@@ -318,13 +307,9 @@ namespace test
 
         static int RunShowPending(ShowPendingOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var spends = wallet.PendingSpendsGet(opts.Tag, new PendingSpendState[] { PendingSpendState.Pending, PendingSpendState.Error });
             foreach (var spend in spends)
                 Console.WriteLine(spend);
@@ -333,13 +318,9 @@ namespace test
 
         static int RunActionPending(ActionPendingOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -354,13 +335,9 @@ namespace test
 
         static int RunCancelPending(CancelPendingOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+             var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             wallet.PendingSpendCancel(opts.SpendCode);
             wallet.Save();
             return 0;
@@ -368,13 +345,9 @@ namespace test
 
         static int RunSpend(SpendOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -390,13 +363,9 @@ namespace test
 
         static int RunConsolidate(ConsolidateOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -415,13 +384,9 @@ namespace test
 
         static int RunConsolidateExclude(ConsolidateExcludeOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -438,13 +403,9 @@ namespace test
 
         static int RunShowUnAck(ShowUnAckOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             foreach (var tx in wallet.GetUnacknowledgedTransactions(opts.Tag))
                 Console.WriteLine(tx);
             return 0;
@@ -452,13 +413,9 @@ namespace test
 
         static int RunAck(AckOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
             foreach (var tx in txs)
                 Console.WriteLine(tx);
