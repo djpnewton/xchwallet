@@ -21,6 +21,12 @@ namespace test
             public string Filename { get; set; }
         }
 
+        class MinConfOptions : CommonOptions
+        {
+            [Option('c', "confirmations", Default = 0, HelpText = "Minimum number of confirmations (default: 0)")]
+            public int MinimumConfirmations { get; set; } 
+        }
+
         [Verb("new", HelpText = "New wallet")]
         class NewOptions : CommonOptions
         { 
@@ -29,10 +35,21 @@ namespace test
         }
 
         [Verb("show", HelpText = "Show wallet details")]
-        class ShowOptions : CommonOptions
+        class ShowOptions : MinConfOptions
+        { }
+
+        [Verb("balance", HelpText = "Show total balance of wallet tags")]
+        class BalanceOptions : MinConfOptions
         {
-            [Option('c', "confirmations", Default = 0, HelpText = "Minimum number of confirmations (default: 0)")]
-            public int MinimumConfirmations { get; set; } 
+            [Option('t', "tags", Required = true, HelpText = "The tags to get the total balance of")]
+            public string Tags { get; set; }  
+        }
+
+        [Verb("balance_exclude", HelpText = "Show total balance of wallet all tags excluding one specified")]
+        class BalanceExcludeOptions : MinConfOptions
+        {
+            [Option('t', "tagexclude", Required = true, HelpText = "The tag to exclude")]
+            public string TagExclude { get; set; } 
         }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
@@ -81,10 +98,20 @@ namespace test
         { }
 
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
-        class ConsolidateOptions : CommonOptions
+        class ConsolidateOptions : MinConfOptions
         { 
             [Option('t', "tags", Required = true, HelpText = "Wallet tag(s) to spend from")]
             public string Tags { get; set; }
+
+            [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
+            public string TagTo { get; set; }
+        }
+
+        [Verb("consolidate_exclude", HelpText = "Consolidate funds from all tags except the one specified")]
+        class ConsolidateExcludeOptions : MinConfOptions
+        { 
+            [Option('t', "tagExclude", Required = true, HelpText = "Wallet tag to exclude")]
+            public string TagExclude { get; set; }
 
             [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
             public string TagTo { get; set; }
@@ -193,6 +220,38 @@ namespace test
             }
             PrintWallet(wallet, opts.MinimumConfirmations);
             wallet.Save();
+            return 0;
+        }
+
+        static int RunBalance(BalanceOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var tagList = opts.Tags.Split(',')
+                .Select(m => { return m.Trim(); })
+                .ToList();
+            var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
+            Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
+            return 0;
+        }
+
+        static int RunBalanceExclude(BalanceExcludeOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var tagList = wallet.GetTags().Where(t => t.Tag != opts.TagExclude).Select(t => t.Tag);
+            var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
+            Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             return 0;
         }
 
@@ -346,7 +405,30 @@ namespace test
                     .ToList();
             IEnumerable<WalletTx> wtxs;
             EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs, opts.MinimumConfirmations);
+            Console.WriteLine(res);
+            foreach (var wtx in wtxs)
+                Console.WriteLine(wtx.ChainTx.TxId);
+            wallet.Save();
+            return 0;
+        }
+
+        static int RunConsolidateExclude(ConsolidateExcludeOptions opts)
+        {
+            var walletType = GetWalletType(opts.Filename);
+            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            if (wallet == null)
+            {
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                return 1;
+            }
+            var feeUnit = new BigInteger(0);
+            var feeMax = new BigInteger(0);
+            setFees(wallet, ref feeUnit, ref feeMax);
+            var tagList = wallet.GetTags().Where(t => t.Tag != opts.TagExclude).Select(t => t.Tag);
+            IEnumerable<WalletTx> wtxs;
+            EnsureTagExists(wallet, opts.TagTo);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs, opts.MinimumConfirmations);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
@@ -387,12 +469,14 @@ namespace test
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, NewAddrOptions,
+            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, BalanceExcludeOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions>(args)
+                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
+                (BalanceOptions opts) => RunBalance(opts),
+                (BalanceExcludeOptions opts) => RunBalanceExclude(opts),
                 (NewAddrOptions opts) => RunNewAddr(opts),
                 (PendingSpendOptions opts) => RunPendingSpend(opts),
                 (ShowPendingOptions opts) => RunShowPending(opts),
@@ -400,6 +484,7 @@ namespace test
                 (CancelPendingOptions opts) => RunCancelPending(opts),
                 (SpendOptions opts) => RunSpend(opts),
                 (ConsolidateOptions opts) => RunConsolidate(opts),
+                (ConsolidateExcludeOptions opts) => RunConsolidateExclude(opts),
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
                 errs => 1);
