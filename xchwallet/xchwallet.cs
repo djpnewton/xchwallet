@@ -245,10 +245,12 @@ namespace xchwallet
             BigInteger total = 0;
             foreach (var tx in addr.Txs)
             {
-                if (minConfs > 0 && tx.ChainTx.Confirmations < minConfs)
-                    continue;
                 if (tx.Direction == WalletDirection.Incomming)
+                {
+                    if (minConfs > 0 && tx.ChainTx.Confirmations < minConfs)
+                        continue;
                     total += tx.ChainTx.Amount;
+                }
                 else if (tx.Direction == WalletDirection.Outgoing)
                 {
                     total -= tx.ChainTx.Amount;
