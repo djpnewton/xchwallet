@@ -25,6 +25,7 @@ namespace xchwallet
     {
         string Type();
         IEnumerable<FiatWalletTag> GetTags();
+        bool HasTag(string tag);
         FiatWalletTag NewTag(string tag);
         IEnumerable<FiatWalletTx> GetTransactions(string tag);
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
@@ -81,6 +82,11 @@ namespace xchwallet
         public IEnumerable<FiatWalletTag> GetTags()
         {
             return db.WalletTags;
+        }
+
+        public bool HasTag(string tag)
+        {
+            return db.WalletTags.Any(t => t.Tag == tag);
         }
 
         public FiatWalletTag NewTag(string tag)
