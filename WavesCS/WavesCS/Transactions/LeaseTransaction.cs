@@ -8,9 +8,10 @@ namespace WavesCS
         public string Recipient { get; }
         public decimal Amount { get; }
         public bool IsActive { get; }
+        public override byte Version { get; set; } = 2;
 
-        public LeaseTransaction(byte[] senderPublicKey, string recipient, decimal amount, decimal fee = 0.001m) : 
-            base(senderPublicKey)
+        public LeaseTransaction(char chainId, byte[] senderPublicKey, string recipient, decimal amount, decimal fee = 0.001m) : 
+            base(chainId, senderPublicKey)
         {
             Recipient = recipient;
             Amount = amount;
@@ -22,7 +23,7 @@ namespace WavesCS
             Recipient = tx.GetString("recipient");
             Amount = Assets.WAVES.LongToAmount(tx.GetLong("amount"));
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
-            IsActive = tx.GetString("status") == "active";
+            IsActive = tx.ContainsKey("status") ? tx.GetString("status") == "active" : true;
         }
 
         public override byte[] GetBody()
@@ -48,15 +49,19 @@ namespace WavesCS
 
         public override DictionaryObject GetJson()
         {
-            return new DictionaryObject {
+            var result = new DictionaryObject {
                 {"type", (byte) TransactionType.Lease},
                 {"senderPublicKey", SenderPublicKey.ToBase58()},                
-                {"sender", Sender},
                 {"recipient", Recipient},
                 {"amount", Assets.WAVES.AmountToLong(Amount)},
                 {"fee", Assets.WAVES.AmountToLong(Fee)},
-                {"timestamp", Timestamp.ToLong()}                
-            };        
+                {"timestamp", Timestamp.ToLong()}
+            };
+
+            if (Sender != null)
+                result.Add("sender", Sender);
+
+            return result;
         }
 
         protected override bool SupportsProofs()

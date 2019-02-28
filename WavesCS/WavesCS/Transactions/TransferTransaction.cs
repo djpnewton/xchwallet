@@ -13,23 +13,23 @@ namespace WavesCS
         public Asset FeeAsset { get; }
         public byte[] Attachment { get; }
 
-        public override byte Version { get; set; } = 1;
+        public override byte Version { get; set; } = 2;
 
-        public TransferTransaction(byte[] senderPublicKey, string recipient,
+        public TransferTransaction(char chainId, byte[] senderPublicKey, string recipient,
            Asset asset, decimal amount, string attachment) :
-        this(senderPublicKey, recipient, asset, amount, 0.001m,
+        this(chainId, senderPublicKey, recipient, asset, amount, 0.001m,
              Encoding.UTF8.GetBytes(attachment))
         {
         }
         
-        public TransferTransaction(byte[] senderPublicKey, string recipient,
+        public TransferTransaction(char chainId, byte[] senderPublicKey, string recipient,
             Asset asset, decimal amount, decimal fee = 0.001m, byte[] attachment = null) : 
-            this(senderPublicKey, recipient, asset, amount, fee, Assets.WAVES, attachment)
+            this(chainId, senderPublicKey, recipient, asset, amount, fee, Assets.WAVES, attachment)
         {                  
         }
         
-        public TransferTransaction(byte[] senderPublicKey, string recipient,
-            Asset asset, decimal amount, decimal fee, Asset feeAsset, byte[] attachment = null) : base(senderPublicKey)
+        public TransferTransaction(char chainId, byte[] senderPublicKey, string recipient,
+            Asset asset, decimal amount, decimal fee, Asset feeAsset, byte[] attachment = null) : base(chainId, senderPublicKey)
         {
             Recipient = recipient;
             Amount = amount;
@@ -41,16 +41,17 @@ namespace WavesCS
 
         public TransferTransaction(DictionaryObject tx): base(tx)
         {
+            var node = new Node(tx.GetChar("chainId"));
             Asset = Assets.WAVES;
             if (tx.ContainsKey("assetId") && tx.GetString("assetId") != null)
-                Asset = Assets.GetById(tx.GetString("assetId"));
+                Asset = node.GetAsset(tx.GetString("assetId"));
 
             FeeAsset = Assets.WAVES;
             if (tx.ContainsKey("feeAssetId")
                 && tx.GetString("feeAssetId") != null
                 && tx.GetString("feeAssetId") != "")
             {
-                FeeAsset = Assets.GetById(tx.GetString("feeAssetId"));
+                FeeAsset = node.GetAsset(tx.GetString("feeAssetId"));
             }
 
             Amount = Asset.LongToAmount(tx.GetLong("amount"));
@@ -105,12 +106,7 @@ namespace WavesCS
 
         public override byte[] GetIdBytes()
         {
-            var stream = new MemoryStream();
-            var writer = new BinaryWriter(stream);
-
-            writer.Write(TransactionType.Transfer);
-            WriteBytes(writer);
-            return stream.ToArray();
+            return GetBody();
         }
 
 
@@ -119,7 +115,6 @@ namespace WavesCS
             var result = new DictionaryObject
             {
                 {"type", (byte) TransactionType.Transfer},
-                {"sender", Sender},
                 {"senderPublicKey", SenderPublicKey.ToBase58()},
                 {"recipient", Recipient},
                 {"amount", Asset.AmountToLong(Amount)},
@@ -130,8 +125,13 @@ namespace WavesCS
                 {"timestamp", Timestamp.ToLong()},
                 {"attachment", Attachment.ToBase58()}
             };
+
             if (Version > 1)
                 result.Add("version", Version);
+
+            if (Sender != null)
+                result.Add("sender", Sender);
+
             return result;
         }
 

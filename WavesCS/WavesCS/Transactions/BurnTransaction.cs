@@ -7,8 +7,9 @@ namespace WavesCS
     {
         public Asset Asset { get; }
         public decimal Quantity { get; }
+        public override byte Version { get; set; } = 2;
 
-        public BurnTransaction(byte[] senderPublicKey, Asset asset, decimal quantity, decimal fee = 0.001m) : base(senderPublicKey)
+        public BurnTransaction(char chainId, byte[] senderPublicKey, Asset asset, decimal quantity, decimal fee = 0.001m) : base(chainId, senderPublicKey)
         {
             Asset = asset;
             Quantity = quantity;
@@ -17,7 +18,8 @@ namespace WavesCS
 
         public BurnTransaction(DictionaryObject tx) : base(tx)
         {
-            Asset = Assets.GetById(tx.GetString("assetId"));
+            var node = new Node(tx.GetChar("chainId"));
+            Asset = node.GetAsset(tx.GetString("assetId"));
             Quantity = Asset.LongToAmount(tx.GetLong("amount"));
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
         }
@@ -44,16 +46,20 @@ namespace WavesCS
 
         public override DictionaryObject GetJson()
         {
-            return new DictionaryObject
+            var result = new DictionaryObject
             {
                 {"type", (byte) TransactionType.Burn},
                 {"senderPublicKey", SenderPublicKey.ToBase58()},
-                {"sender", Sender},
                 {"assetId", Asset.Id},
                 {"amount", Asset.AmountToLong(Quantity)},
                 {"fee", Assets.WAVES.AmountToLong(Fee)},
                 {"timestamp", Timestamp.ToLong()}
             };
+
+            if (Sender != null)
+                result.Add("sender", Sender);
+
+            return result;
         }
 
         protected override bool SupportsProofs()

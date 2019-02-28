@@ -6,9 +6,10 @@ namespace WavesCS
     public class CancelLeasingTransaction : Transaction
     {
         public string LeaseId { get; }
-      
-        public CancelLeasingTransaction(byte[] senderPublicKey, string leaseId, decimal fee = 0.001m) : 
-            base(senderPublicKey)
+        public override byte Version { get; set; } = 2;
+
+        public CancelLeasingTransaction(char chainId, byte[] senderPublicKey, string leaseId, decimal fee = 0.001m) : 
+            base(chainId, senderPublicKey)
         {
             LeaseId = leaseId;
             Fee = fee;
@@ -41,15 +42,19 @@ namespace WavesCS
 
         public override DictionaryObject GetJson()
         {
-            return new DictionaryObject
+            var result = new DictionaryObject
             {
                 {"type", (byte) TransactionType.LeaseCancel},
                 {"senderPublicKey", SenderPublicKey.ToBase58()},
-                {"sender", Sender},
                 {"leaseId", LeaseId},
                 {"fee", Assets.WAVES.AmountToLong(Fee)},
                 {"timestamp", Timestamp.ToLong()}
             };
+
+            if (Sender != null)
+                result.Add("sender", Sender);
+
+            return result;
         }
 
         protected override bool SupportsProofs()

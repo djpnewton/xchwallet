@@ -7,13 +7,12 @@ namespace WavesCS
     public class AliasTransaction : Transaction
     {
         public string Alias { get; }
-        public char ChainId { get; set; }
- 
+        public override byte Version { get; set; } = 2;
+
         public AliasTransaction(byte[] senderPublicKey, string alias, char chainId, decimal fee = 0.001m) : 
-            base(senderPublicKey)
+            base(chainId, senderPublicKey)
         {
             Alias = alias;
-            ChainId = chainId;
             Fee = fee;
         }
 
@@ -21,7 +20,7 @@ namespace WavesCS
         {
             Alias = tx.GetString("alias");
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
-            ChainId = tx.GetChar("chainId");
+            ChainId = tx.ContainsKey("chainId") ? tx.GetChar("chainId") : '\0';
         }
 
         public override byte[] GetBody()
@@ -58,15 +57,19 @@ namespace WavesCS
 
         public override DictionaryObject GetJson()
         {
-            return new DictionaryObject
+            var result = new DictionaryObject
                 {
                     {"type", (byte) TransactionType.Alias},
                     {"senderPublicKey", SenderPublicKey.ToBase58()},
-                    {"sender", AddressEncoding.GetAddressFromPublicKey(SenderPublicKey, ChainId)},
                     {"alias", Alias},
                     {"fee", Assets.WAVES.AmountToLong(Fee)},
                     {"timestamp", Timestamp.ToLong()}
                 };
+
+            if (Sender != null)
+                result.Add("sender", AddressEncoding.GetAddressFromPublicKey(SenderPublicKey, ChainId));
+
+            return result;
         }
 
         protected override bool SupportsProofs()

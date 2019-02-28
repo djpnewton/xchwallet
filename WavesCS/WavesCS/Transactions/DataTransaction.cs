@@ -11,8 +11,8 @@ namespace WavesCS
         public DictionaryObject Entries { get; }
         public override byte Version { get; set; } = 1;
 
-        public DataTransaction(byte[] senderPublicKey, DictionaryObject entries,
-            decimal? fee = null) : base(senderPublicKey)
+        public DataTransaction(char chainId, byte[] senderPublicKey, DictionaryObject entries,
+            decimal? fee = null) : base(chainId, senderPublicKey)
         {
             Entries = entries;
             Fee = fee ?? ((GetBody().Length + 70) / 1024 + 1) * 0.001m;
@@ -85,12 +85,11 @@ namespace WavesCS
 
         public override DictionaryObject GetJson()
         {
-            return new DictionaryObject
+            var result = new DictionaryObject
             {
                 {"type", (byte) TransactionType.DataTx},
                 {"version", Version},
                 {"senderPublicKey", SenderPublicKey.ToBase58() },
-                {"sender", Sender},
                 {"data", Entries.Select(pair => new DictionaryObject
                 {
                     {"key", pair.Key},
@@ -100,6 +99,11 @@ namespace WavesCS
                 {"fee", Assets.WAVES.AmountToLong(Fee)},
                 {"timestamp", Timestamp.ToLong()},                
             };
+
+            if (Sender != null)
+                result.Add("sender", Sender);
+
+            return result;
         }
 
         protected override bool SupportsProofs()

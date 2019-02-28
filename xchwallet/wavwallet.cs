@@ -206,7 +206,7 @@ namespace xchwallet
                     var account = CreateAccount(Int32.Parse(acct.Path));
                     var amountDecimal = asset.BigIntToAmount(amount);
                     var feeDecimal = asset.BigIntToAmount(fee);
-                    var tx = new TransferTransaction(account.PublicKey, to, asset, amountDecimal, feeDecimal, feeAsset);
+                    var tx = new TransferTransaction(ChainId(), account.PublicKey, to, asset, amountDecimal, feeDecimal, feeAsset);
                     tx.Sign(account);
                     signedSpendTx = new Tuple<string, TransferTransaction>(acct.Address, tx);
                     return WalletError.Success;
@@ -238,7 +238,7 @@ namespace xchwallet
                     var wavesAccount = CreateAccount(Int32.Parse(acct.Path));
                     var amountThisAddressDecimal = asset.BigIntToAmount(amountThisAddress);
                     var feeDecimal = asset.BigIntToAmount(fee);
-                    var tx = new TransferTransaction(wavesAccount.PublicKey, to, asset, amountThisAddressDecimal, feeDecimal, feeAsset);
+                    var tx = new TransferTransaction(ChainId(), wavesAccount.PublicKey, to, asset, amountThisAddressDecimal, feeDecimal, feeAsset);
                     tx.Sign(wavesAccount);
                     // update spend tx list and amount remaining
                     amountRemaining -= amountThisAddress;
