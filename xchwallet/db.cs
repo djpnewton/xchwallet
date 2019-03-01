@@ -482,6 +482,11 @@ namespace xchwallet
             return _tag;
         }
 
+        public IEnumerable<FiatWalletTx> TxsGet()
+        {
+            return WalletTxs;
+        }
+
         public IEnumerable<FiatWalletTx> TxsGet(string tag)
         {
             var _tag = TagGet(tag);

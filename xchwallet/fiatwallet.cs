@@ -27,7 +27,9 @@ namespace xchwallet
         IEnumerable<FiatWalletTag> GetTags();
         bool HasTag(string tag);
         FiatWalletTag NewTag(string tag);
+        IEnumerable<FiatWalletTx> GetTransactions();
         IEnumerable<FiatWalletTx> GetTransactions(string tag);
+        long GetBalance(string tag);
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
         FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata);
         FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account);
@@ -96,9 +98,30 @@ namespace xchwallet
             return tag_;
         }
 
+        public IEnumerable<FiatWalletTx> GetTransactions()
+        {
+            return db.TxsGet();
+        }
+
         public IEnumerable<FiatWalletTx> GetTransactions(string tag)
         {
             return db.TxsGet(tag);
+        }
+
+        public long GetBalance(string tag)
+        {
+            long total = 0;
+            foreach (var tx in GetTransactions(tag))
+            {
+                if (tx.BankTx != null)
+                {
+                    if (tx.Direction == WalletDirection.Incomming)
+                        total += tx.BankTx.Amount;
+                    else
+                        total -= tx.BankTx.Amount;
+                }
+            }
+            return total;
         }
 
         public FiatWalletTx RegisterPendingDeposit(string tag, long amount)
