@@ -80,10 +80,11 @@ namespace xchwallet
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
             var limit = 100;
+            string after = null;
             while (!sufficientTxsQueried)
             {  
-                var nodeTxs = node.GetTransactions(address.Address, limit);
-                logger.LogDebug("UpdateTxs ({0}) count: {1}, limit: {2}, sufficientTxsQueried: {3}", address.Address, nodeTxs.Count(), limit, sufficientTxsQueried);
+                var nodeTxs = node.GetTransactions(address.Address, limit, after);
+                logger.LogDebug($"UpdateTxs ({address.Address}) count: {nodeTxs.Count()}, limit: {limit}, after: {after}, processedCount: {processedTxs.Count()}");
  
                 // if less txs are returned then we requested we have all txs for this account
                 if (nodeTxs.Count() < limit)
@@ -91,6 +92,8 @@ namespace xchwallet
 
                 foreach (var nodeTx in nodeTxs)
                 {
+                    //TODO: we can use this once pagination is fixed: https://github.com/wavesplatform/Waves/pull/1971
+                    //after = nodeTx.GenerateId();
                     if (nodeTx is TransferTransaction)
                     {
                         var trans = (TransferTransaction)nodeTx;
@@ -153,6 +156,7 @@ namespace xchwallet
                         }
                     }
                 }
+                //TODO: remove this when pagination works: https://github.com/wavesplatform/Waves/pull/1971 
                 limit *= 2;
             }
         }

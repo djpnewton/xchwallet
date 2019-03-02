@@ -147,9 +147,9 @@ namespace WavesCS
             return asset;
         }
 
-        public Transaction[] GetTransactions(string address, int limit = 100)
+        public Transaction[] GetTransactions(string address, int limit = 100, string after = null)
         {
-            return GetTransactionsByAddress(address, limit)
+            return GetTransactionsByAddress(address, limit, after)
                 .Select(tx => { tx["chainId"] = ChainId; return tx; })
                 .Select(Transaction.FromJson)
                 .ToArray();
@@ -175,11 +175,11 @@ namespace WavesCS
             }
         }
 
-        public T[] GetTransactions<T>(string address, int limit = 100) where T : Transaction
+        public T[] GetTransactions<T>(string address, int limit = 100, string after = null) where T : Transaction
         {
             var typeId = TransactionTypeId(typeof(T));
 
-            return GetTransactionsByAddress(address, limit)
+            return GetTransactionsByAddress(address, limit, after)
                 .Where(tx => (TransactionType)tx.GetByte("type") == typeId)
                 .Select(tx => { tx["chainId"] = ChainId; return tx; })
                 .Select(Transaction.FromJson)
@@ -403,9 +403,12 @@ namespace WavesCS
             return Http.Post($"{_host}/assets/broadcast/batch-transfer", data);
         }
 
-        public DictionaryObject[] GetTransactionsByAddress(string address, int limit)
+        public DictionaryObject[] GetTransactionsByAddress(string address, int limit, string after)
         {
-            return Http.GetFlatObjects($"{_host}/transactions/address/{address}/limit/{limit}");
+            var url = $"{_host}/transactions/address/{address}/limit/{limit}";
+            if (!string.IsNullOrEmpty(after))
+                url += $"?after={after}";
+            return Http.GetFlatObjects(url);
         }
 
         public decimal CalculateFee(Transaction transaction)
