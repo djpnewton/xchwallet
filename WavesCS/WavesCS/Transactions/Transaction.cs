@@ -12,6 +12,7 @@ namespace WavesCS
         public string Sender { get; }
         public decimal Fee { get; set; }
         public char ChainId { get; set; }
+        public long Height { get; }
 
         public virtual byte Version { get; set; }
 
@@ -29,6 +30,7 @@ namespace WavesCS
             SenderPublicKey = senderPublicKey;
             Proofs = new byte[8][];
             ChainId = chainId;
+            Height = 0;
         }
 
         protected Transaction(DictionaryObject tx)
@@ -51,6 +53,8 @@ namespace WavesCS
                 if (tx.ContainsKey("signature"))
                     Proofs[0] = tx.GetString("signature").FromBase58();
             }
+
+            Height = tx.ContainsKey("height") ? tx.GetLong("height") : 0;
         }
         
         protected abstract bool SupportsProofs();

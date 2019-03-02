@@ -105,11 +105,7 @@ namespace xchwallet
 
                             var amount = trans.Asset.AmountToLong(trans.Amount);
                             var fee = trans.FeeAsset.AmountToLong(trans.Fee);
-                            // calculate the confs - this is slow, we could probably make it better by recording the block height in ChainTx
-                            // once then we can cheaply recalc the confirmation count
-                            var txinfo = node.GetObject($"transactions/info/{id}");
-                            var txHeight = (long)txinfo["height"];
-                            var confs = blockHeight - txHeight;
+                            var confs = trans.Height > 0 ? (blockHeight - trans.Height) + 1 : 0;
 
                             var ctx = db.ChainTxGet(id);
                             if (ctx == null)
@@ -119,14 +115,14 @@ namespace xchwallet
                                 ctx = addedTxs.SingleOrDefault(t => t.TxId == id);
                                 if (ctx == null)
                                 {
-                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, txHeight, confs);
+                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, trans.Height, confs);
                                     db.ChainTxs.Add(ctx);
                                     addedTxs.Add(ctx);
                                 }
                             }
                             else
                             {
-                                ctx.Height = txHeight;
+                                ctx.Height = trans.Height;
                                 ctx.Confirmations = confs;
                                 db.ChainTxs.Update(ctx);
                                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
