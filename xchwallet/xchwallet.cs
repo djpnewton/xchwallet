@@ -101,7 +101,7 @@ namespace xchwallet
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
-        void AddNote(string tag, WalletTx wtx, string note);
+        void SetNote(WalletTx wtx, string note);
         void SetTagOnBehalfOf(string tag, WalletTx wtx, string tagOnBehalfOf);
         void SetTagOnBehalfOf(string tag, WalletPendingSpend spend, string tagOnBehalfOf);
         bool ValidateAddress(string address);
@@ -353,7 +353,7 @@ namespace xchwallet
             db.WalletTxs.UpdateRange(txs);
         }
 
-        public void AddNote(string tag, WalletTx wtx, string note)
+        public void SetNote(WalletTx wtx, string note)
         {
             wtx.Meta.Note = note;
             db.WalletTxs.Update(wtx);
