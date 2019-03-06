@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Storage;
 using Newtonsoft.Json;
 
 namespace xchwallet
@@ -107,6 +108,7 @@ namespace xchwallet
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
+        IDbContextTransaction BeginTransaction();
 
         void Save();
     }
@@ -369,6 +371,11 @@ namespace xchwallet
         {
             spend.Meta.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletPendingSpends.Update(spend);
+        }
+
+        public IDbContextTransaction BeginTransaction()
+        {
+            return db.Database.BeginTransaction();
         }
     }
 }
