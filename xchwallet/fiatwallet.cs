@@ -142,6 +142,8 @@ namespace xchwallet
             var tx = db.TxGet(depositCode);
             if (tx == null)
                 throw new Exception("Tx not found");
+            if (tx.Direction != WalletDirection.Incomming)
+                throw new Exception("Tx is not deposit");
             if (tx.BankTx != null)
                 throw new Exception("BankTx already set");
             var bankTx = new BankTx(bankMetadata, date, amount);
@@ -171,6 +173,8 @@ namespace xchwallet
             var tx = db.TxGet(depositCode);
             if (tx == null)
                 throw new Exception("Tx not found");
+            if (tx.Direction != WalletDirection.Outgoing)
+                throw new Exception("Tx is not withdrawal");
             if (tx.BankTx != null)
                 throw new Exception("BankTx already set");
             var bankTx = new BankTx(bankMetadata, date, amount);
