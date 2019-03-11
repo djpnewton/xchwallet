@@ -183,11 +183,15 @@ namespace xchwallet
 
         public BitcoinAddress AddChangeAddress(WalletTag tag)
         {
-            // create new address that is unused
+            // get new unused address
             var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Change, reserve: false);
             var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-            var address = new WalletAddr(tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
+            // check that address is not already present in the db (we used 'reserve: false')
+            var address = db.AddrGet(addr.ToString());
+            if (address != null)
+                return addr;
             // add to address list
+            address = new WalletAddr(tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             db.WalletAddrs.Add(address);
             return addr;
         }
