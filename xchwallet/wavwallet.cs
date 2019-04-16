@@ -350,13 +350,20 @@ namespace xchwallet
         {
             if (string.IsNullOrWhiteSpace(address))
                 return false;
-            var data = Base58.Decode(address);
-            if (data.Length != 26)
+            try
+            {
+                var data = Base58.Decode(address);
+                if (data.Length != 26)
+                    return false;
+                if (data[0] != 1)
+                    return false;
+                if (data[1] != ChainId())
+                    return false;
+            }
+            catch
+            {
                 return false;
-            if (data[0] != 1)
-                return false;
-            if (data[1] != ChainId())
-                return false;
+            }
             return true;
         }
 
