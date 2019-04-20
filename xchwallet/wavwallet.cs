@@ -94,8 +94,7 @@ namespace xchwallet
 
                 foreach (var nodeTx in nodeTxs)
                 {
-                    //TODO: we can use this once pagination is fixed: https://github.com/wavesplatform/Waves/pull/1971
-                    //after = nodeTx.GenerateId();
+                    after = nodeTx.GenerateId();
                     if (nodeTx is TransferTransaction)
                     {
                         var trans = (TransferTransaction)nodeTx;
@@ -167,8 +166,6 @@ namespace xchwallet
                         }
                     }
                 }
-                //TODO: remove this when pagination works: https://github.com/wavesplatform/Waves/pull/1971 
-                limit *= 2;
             }
         }
 
