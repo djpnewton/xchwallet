@@ -55,6 +55,8 @@ namespace xchwallet
             return mainnet;
         }
 
+        public override LedgerModel LedgerModel { get { return LedgerModel.UTXO; } }
+        
         public override WalletAddr NewAddress(string tag)
         {
             // create new address that is unused
@@ -75,6 +77,9 @@ namespace xchwallet
 
         private void processUtxo(NBXplorer.Models.UTXO utxo, int currentHeight, bool confirmed)
         {
+            //TODO - add attachment
+            // - read OP_RETURN ?
+            
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
             var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
             var id = utxo.Outpoint.Hash.ToString();

@@ -154,6 +154,7 @@ namespace xchwallet
     public class WalletContext : BaseContext
     {
         public DbSet<ChainTx> ChainTxs { get; set; }
+        public DbSet<ChainAttachment> ChainAttachments { get; set; }
         public DbSet<WalletTag> WalletTags { get; set; }
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
@@ -180,7 +181,14 @@ namespace xchwallet
             builder.Entity<WalletTag>()
                 .HasIndex(t => t.Tag)
                 .IsUnique();
-                
+
+            /*
+            SOON!! - TODO
+            builder.Entity<WalletAddr>()
+                .HasIndex(a => a.Address)
+                .IsUnique();
+            */
+
             builder.Entity<ChainTx>()
                 .HasIndex(t => t.TxId)
                 .IsUnique();
@@ -197,6 +205,10 @@ namespace xchwallet
             builder.Entity<WalletPendingSpend>()
                 .Property(s => s.Amount)
                 .HasConversion(bigIntConverter);
+
+            builder.Entity<ChainAttachment>()
+                .HasIndex(t => t.ChainTxId)
+                .IsUnique();
         }
 
         public WalletTag TagGet(string tag)
@@ -296,6 +308,7 @@ namespace xchwallet
         public BigInteger Fee { get; set; }
         public long Height { get; set; }
         public long Confirmations { get; set; }
+        public virtual ChainAttachment Attachment { get; set; }
 
         public ChainTx()
         {
@@ -323,7 +336,36 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Height} {Confirmations}>";
+            string att = null;
+            if (Attachment != null)
+                att = System.Text.Encoding.UTF8.GetString(Attachment.Data);
+            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Height} {Confirmations} '{att}'>";
+        }
+    }
+
+    public class ChainAttachment
+    {
+        public int Id { get; set; }
+        public int ChainTxId { get; set; }
+        public virtual ChainTx Tx { get; set; }
+
+        public byte[] Data { get; set; }
+
+        public ChainAttachment()
+        {
+            this.Tx = null;
+            this.Data = null;
+        }
+
+        public ChainAttachment(ChainTx tx, byte[] data)
+        {
+            this.Tx = tx;
+            this.Data = data;
+        }
+
+        public override string ToString()
+        {
+            return $"<'{Data}'>";
         }
     }
 

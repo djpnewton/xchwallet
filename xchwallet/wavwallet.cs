@@ -50,6 +50,8 @@ namespace xchwallet
             return mainnet;
         }
 
+        public override LedgerModel LedgerModel { get { return LedgerModel.Account; } }
+
         public override WalletAddr NewAddress(string tag)
         {
             var nonce = db.LastPathIndex;
@@ -109,6 +111,7 @@ namespace xchwallet
                             var amount = trans.Asset.AmountToLong(trans.Amount);
                             var fee = trans.FeeAsset.AmountToLong(trans.Fee);
                             var confs = trans.Height > 0 ? (blockHeight - trans.Height) + 1 : 0;
+                            var attachment = trans.Attachment;
 
                             var ctx = db.ChainTxGet(id);
                             if (ctx == null)
@@ -130,6 +133,14 @@ namespace xchwallet
                                 db.ChainTxs.Update(ctx);
                                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
                                 sufficientTxsQueried = true;
+                            }
+                            if (attachment != null && attachment.Length > 0)
+                            {
+                                if (ctx.Attachment == null)
+                                {
+                                    var att = new ChainAttachment(ctx, attachment);
+                                    db.ChainAttachments.Add(att);
+                                }
                             }
                             var wtx = db.TxGet(address, ctx);
                             if (wtx == null)

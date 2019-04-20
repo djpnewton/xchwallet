@@ -52,6 +52,12 @@ namespace xchwallet
         { }
     }
 
+    public enum LedgerModel
+    {
+        Account,
+        UTXO
+    }
+
     public enum WalletDirection
     {
         Incomming, Outgoing
@@ -79,6 +85,7 @@ namespace xchwallet
     {
         string Type();
         bool IsMainnet();
+        LedgerModel GetLedgerModel();
         IEnumerable<WalletTag> GetTags();
         bool HasTag(string tag);
         WalletTag NewTag(string tag);
@@ -116,6 +123,7 @@ namespace xchwallet
     public abstract class BaseWallet : IWallet
     {
         public abstract bool IsMainnet();
+        public abstract LedgerModel LedgerModel { get; }
         public abstract WalletAddr NewAddress(string tag);
         public abstract void UpdateFromBlockchain();
         public abstract IEnumerable<WalletTx> GetTransactions(string tag);
@@ -134,6 +142,11 @@ namespace xchwallet
         protected WalletContext db = null;
         protected string seedHex = null;
         protected bool mainnet = false;
+
+        public LedgerModel GetLedgerModel()
+        {
+            return LedgerModel;
+        } 
 
         void CheckType()
         {

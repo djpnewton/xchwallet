@@ -61,6 +61,8 @@ namespace xchwallet
             return mainnet;
         }
 
+        public override LedgerModel LedgerModel { get { return LedgerModel.Account; } }
+
         public override WalletAddr NewAddress(string tag)
         {
             var pathIndex = db.LastPathIndex + 1;
@@ -109,6 +111,9 @@ namespace xchwallet
 
         void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs)
         {
+            //TODO - add attachment
+            // - read the 'data' field (https://ethereum.stackexchange.com/questions/2466/how-do-i-send-an-arbitary-message-to-an-ethereum-address)
+
             var blockNumTask = web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
             blockNumTask.Wait();
             var blockNum = (long)blockNumTask.Result.Value;
