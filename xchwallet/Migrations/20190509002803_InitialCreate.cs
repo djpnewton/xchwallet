@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace xchwallet.Migrations
 {
@@ -11,13 +13,13 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     TxId = table.Column<string>(nullable: true),
                     Date = table.Column<long>(nullable: false),
                     From = table.Column<string>(nullable: true),
                     To = table.Column<string>(nullable: true),
-                    Amount = table.Column<string>(type: "string", nullable: false),
-                    Fee = table.Column<string>(type: "string", nullable: false),
+                    Amount = table.Column<string>(type: "varchar(255)", nullable: false),
+                    Fee = table.Column<string>(type: "varchar(255)", nullable: false),
                     Height = table.Column<long>(nullable: false),
                     Confirmations = table.Column<long>(nullable: false)
                 },
@@ -31,7 +33,7 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     Key = table.Column<string>(nullable: true),
                     Value = table.Column<string>(nullable: true)
                 },
@@ -45,7 +47,7 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     Tag = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
@@ -58,7 +60,7 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     Note = table.Column<string>(nullable: true),
                     TagOnBehalfOf = table.Column<string>(nullable: true)
                 },
@@ -68,11 +70,31 @@ namespace xchwallet.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ChainAttachments",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                    ChainTxId = table.Column<int>(nullable: false),
+                    Data = table.Column<byte[]>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ChainAttachments", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ChainAttachments_ChainTxs_ChainTxId",
+                        column: x => x.ChainTxId,
+                        principalTable: "ChainTxs",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "WalletAddrs",
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     TagId = table.Column<int>(nullable: false),
                     Path = table.Column<string>(nullable: true),
                     PathIndex = table.Column<int>(nullable: false),
@@ -94,7 +116,7 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     ChainTxId = table.Column<int>(nullable: false),
                     WalletAddrId = table.Column<int>(nullable: false),
                     Direction = table.Column<int>(nullable: false),
@@ -129,7 +151,7 @@ namespace xchwallet.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     TagId = table.Column<int>(nullable: false),
                     TagChangeId = table.Column<int>(nullable: false),
                     WalletTxId = table.Column<int>(nullable: true),
@@ -139,7 +161,7 @@ namespace xchwallet.Migrations
                     Error = table.Column<int>(nullable: false),
                     ErrorMessage = table.Column<string>(nullable: true),
                     To = table.Column<string>(nullable: true),
-                    Amount = table.Column<string>(nullable: false),
+                    Amount = table.Column<string>(type: "varchar(255)", nullable: false),
                     WalletTxMetaId = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
@@ -172,9 +194,21 @@ namespace xchwallet.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_ChainAttachments_ChainTxId",
+                table: "ChainAttachments",
+                column: "ChainTxId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ChainTxs_TxId",
                 table: "ChainTxs",
                 column: "TxId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WalletAddrs_Address",
+                table: "WalletAddrs",
+                column: "Address",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -238,6 +272,9 @@ namespace xchwallet.Migrations
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "ChainAttachments");
+
             migrationBuilder.DropTable(
                 name: "WalletCfgs");
 

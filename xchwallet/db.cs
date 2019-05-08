@@ -65,6 +65,10 @@ namespace xchwallet
         public static T CreateSqliteWalletContext<T>(string filename, bool logToConsole)
             where T : DbContext
         {
+            // SHIT
+            throw new Exception("dont use! the migrations have db specific annotations");
+            // SHIT
+
             var optionsBuilder = new DbContextOptionsBuilder<T>();
             optionsBuilder.UseSqlite($"Data Source={filename}");
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
@@ -206,7 +210,7 @@ namespace xchwallet
                 .HasConversion(bigIntConverter);
 
             builder.Entity<WalletPendingSpend>()
-                .HasIndex(t => t.SpendCode)
+                .HasIndex(s => s.SpendCode)
                 .IsUnique();
             builder.Entity<WalletPendingSpend>()
                 .Property(s => s.Amount)
@@ -308,9 +312,9 @@ namespace xchwallet
         public long Date { get; set; }
         public string From { get; set; }
         public string To { get; set; }
-        [Column(TypeName = "string")]
+        [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
-        [Column(TypeName = "string")]
+        [Column(TypeName = "varchar(255)")]
         public BigInteger Fee { get; set; }
         public long Height { get; set; }
         public long Confirmations { get; set; }
@@ -481,6 +485,7 @@ namespace xchwallet
         public WalletError Error { get; set; }
         public string ErrorMessage { get; set; }
         public string To { get; set; }
+        [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
 
         public int WalletTxMetaId { get; set; }
@@ -505,7 +510,7 @@ namespace xchwallet
         {
             base.OnModelCreating(builder);
 
-            builder.Entity<WalletTag>()
+            builder.Entity<FiatWalletTag>()
                 .HasIndex(t => t.Tag)
                 .IsUnique();
 

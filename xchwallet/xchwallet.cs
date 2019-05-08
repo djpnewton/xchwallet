@@ -258,6 +258,8 @@ namespace xchwallet
         public BigInteger GetAddrBalance(WalletAddr addr, int minConfs=0)
         {
             BigInteger total = 0;
+            if (addr.Txs == null)
+                return total;
             foreach (var tx in addr.Txs)
             {
                 if (tx.Direction == WalletDirection.Incomming)

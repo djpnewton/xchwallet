@@ -9,14 +9,15 @@ using xchwallet;
 namespace xchwallet.Migrations
 {
     [DbContext(typeof(WalletContext))]
-    [Migration("20190508162844_AddressUnique")]
-    partial class AddressUnique
+    [Migration("20190509002803_InitialCreate")]
+    partial class InitialCreate
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "2.2.1-servicing-10028");
+                .HasAnnotation("ProductVersion", "2.2.1-servicing-10028")
+                .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             modelBuilder.Entity("xchwallet.ChainAttachment", b =>
                 {
@@ -42,7 +43,7 @@ namespace xchwallet.Migrations
 
                     b.Property<string>("Amount")
                         .IsRequired()
-                        .HasColumnType("string");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<long>("Confirmations");
 
@@ -50,7 +51,7 @@ namespace xchwallet.Migrations
 
                     b.Property<string>("Fee")
                         .IsRequired()
-                        .HasColumnType("string");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("From");
 
@@ -114,7 +115,8 @@ namespace xchwallet.Migrations
                         .ValueGeneratedOnAdd();
 
                     b.Property<string>("Amount")
-                        .IsRequired();
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
 
                     b.Property<long>("Date");
 
