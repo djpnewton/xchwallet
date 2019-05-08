@@ -70,6 +70,15 @@ namespace xchwallet
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole)
+            where T : DbContext
+        {
+            var connString = $"host={host};database={dbName};uid={uid};password={pwd};";
+            var optionsBuilder = new DbContextOptionsBuilder<T>();
+            optionsBuilder.UseMySql(connString);
+            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
+        }
+
         bool logToConsole;
 
         public BaseContext(DbContextOptions options, bool logToConsole) : base(options)
@@ -182,12 +191,9 @@ namespace xchwallet
                 .HasIndex(t => t.Tag)
                 .IsUnique();
 
-            /*
-            SOON!! - TODO
             builder.Entity<WalletAddr>()
                 .HasIndex(a => a.Address)
                 .IsUnique();
-            */
 
             builder.Entity<ChainTx>()
                 .HasIndex(t => t.TxId)
