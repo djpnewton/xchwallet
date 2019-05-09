@@ -96,6 +96,7 @@ namespace xchwallet
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletTx> GetTransactions(string tag);
         IEnumerable<WalletTx> GetAddrTransactions(string address);
+        void DeleteTransaction(string txid);
         BigInteger GetBalance(string tag, int minConfs=0);
         BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
         BigInteger GetAddrBalance(string address, int minConfs=0);
@@ -245,6 +246,11 @@ namespace xchwallet
         public IEnumerable<WalletAddr> GetAddresses(string tag)
         {
             return db.AddrsGet(tag);
+        }
+
+        public void DeleteTransaction(string txid)
+        {
+            db.TxDelete(txid);
         }
 
         public BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0)

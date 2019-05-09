@@ -14,28 +14,28 @@ namespace fiat
 {
     class Program
     {
+        class CommonOptions
+        {
+            [Option("showsql", Default = false, HelpText = "Show SQL commands")]
+            public bool ShowSql { get; set; }
+            [Option('n', "dbname", Required = true, HelpText = "Wallet database name")]
+            public string DbName { get; set; }
+        }
+
         [Verb("new", HelpText = "New fiat wallet")]
-        class NewOptions
+        class NewOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
             [Option('t', "type", Required = true, HelpText = "Fiat type (eg. NZD, USD etc..)")]
             public string Type { get; set; }
         }
 
         [Verb("show", HelpText = "Show wallet details")]
-        class ShowOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-        }
+        class ShowOptions : CommonOptions
+        {}
 
         [Verb("newdeposit", HelpText = "Create a new pending deposit")]
-        class NewDepositOptions
+        class NewDepositOptions : CommonOptions
         { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
             [Option('t', "tag", Required = true, HelpText = "Wallet tag for new deposit")]
             public string Tag { get; set; }
 
@@ -44,11 +44,8 @@ namespace fiat
         }
 
         [Verb("updatedeposit", HelpText = "Update deposit - add bank tx")]
-        class UpdateDepositOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
+        class UpdateDepositOptions : CommonOptions
+        {
             [Option('d', "depositCode", Required = true, HelpText = "Deposit code")]
             public string DepositCode { get; set; }
 
@@ -63,11 +60,8 @@ namespace fiat
         }
 
         [Verb("newwithdrawal", HelpText = "Create a new pending withdrawal")]
-        class NewWithdrawalOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
+        class NewWithdrawalOptions : CommonOptions
+        {
             [Option('t', "tag", Required = true, HelpText = "Wallet tag for new withdrawal")]
             public string Tag { get; set; }
 
@@ -76,11 +70,8 @@ namespace fiat
         }
 
         [Verb("updatewithdrawal", HelpText = "Update withdrawal - add bank tx")]
-        class UpdateWithdrawalOptions
-        { 
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
-
+        class UpdateWithdrawalOptions : CommonOptions
+        {
             [Option('d', "depositCode", Required = true, HelpText = "Deposit code")]
             public string DepositCode { get; set; }
 
@@ -116,18 +107,18 @@ namespace fiat
             }
         }
 
-        static string GetWalletType(string filename)
+        static string GetWalletType(string dbName)
         {
-            using (var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename, false))
+            using (var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>("localhost", dbName, false))
                 return Util.GetWalletType(db);
         }
 
-        static IFiatWallet CreateWallet(string filename, string walletType)
+        static IFiatWallet CreateWallet(string dbName, string walletType, bool showSql)
         {
-            GetLogger().LogDebug("Creating wallet ({0}) using file: '{1}'", walletType, filename);
+            GetLogger().LogDebug("Creating wallet ({0}) for testnet using db: '{1}'", walletType, dbName);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateSqliteWalletContext<FiatWalletContext>(filename, false);
+            var db = BaseContext.CreateMySqlWalletContext<FiatWalletContext>("localhost", dbName, showSql);
             db.Database.Migrate();
             // add dummy bank account
             var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="Wallets Inc.", AccountNumber="22-4444-7777777-22"};
@@ -146,65 +137,58 @@ namespace fiat
             return tag__;
         }
 
-        static int RunNewAndReturnExitCode(NewOptions opts)
+        static IFiatWallet OpenWallet(CommonOptions opts)
         {
-            var wallet = CreateWallet(opts.Filename, opts.Type);
+            var walletType = GetWalletType(opts.DbName);
+            var wallet = CreateWallet(opts.DbName, walletType, opts.ShowSql);
+            if (wallet == null)
+                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+            return wallet;
+        }
+
+        static int RunNew(NewOptions opts)
+        {
+            var wallet = CreateWallet(opts.DbName, opts.Type, opts.ShowSql);
             wallet.Save();
             return 0;
         }
 
-        static int RunShowAndReturnExitCode(ShowOptions opts)
+        static int RunShow(ShowOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             PrintWallet(wallet);
             wallet.Save();
             return 0;
         }
 
-        static int RunNewDepositAndReturnExitCode(NewDepositOptions opts)
+        static int RunNewDeposit(NewDepositOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             EnsureTagExists(wallet, opts.Tag);
             Console.WriteLine(wallet.RegisterPendingDeposit(opts.Tag, opts.Amount));
             wallet.Save();
             return 0;
         }
 
-        static int RunUpdateDepositAndReturnExitCode(UpdateDepositOptions opts)
+        static int RunUpdateDeposit(UpdateDepositOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             wallet.UpdateDeposit(opts.DepositCode, opts.Date, opts.Amount, opts.BankMetadata);
             wallet.Save();
             return 0;
         }
 
-        static int RunNewWithdrawalAndReturnExitCode(NewWithdrawalOptions opts)
+        static int RunNewWithdrawal(NewWithdrawalOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             EnsureTagExists(wallet, opts.Tag);
             var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="John Smith", AccountNumber="12-1234-1234567-12"};
             Console.WriteLine(wallet.RegisterPendingWithdrawal(opts.Tag, opts.Amount, account));
@@ -212,15 +196,11 @@ namespace fiat
             return 0;
         }
 
-        static int RunUpdateWithdrawalAndReturnExitCode(UpdateWithdrawalOptions opts)
+        static int RunUpdateWithdrawal(UpdateWithdrawalOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType);
+            var wallet = OpenWallet(opts);
             if (wallet == null)
-            {
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
                 return 1;
-            }
             wallet.UpdateWithdrawal(opts.DepositCode, opts.Date, opts.Amount, opts.BankMetadata);
             wallet.Save();
             return 0;
@@ -231,12 +211,12 @@ namespace fiat
             return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions,
                 NewDepositOptions, UpdateDepositOptions, NewWithdrawalOptions, UpdateWithdrawalOptions>(args)
                 .MapResult(
-                (NewOptions opts) => RunNewAndReturnExitCode(opts),
-                (ShowOptions opts) => RunShowAndReturnExitCode(opts),
-                (NewDepositOptions opts) => RunNewDepositAndReturnExitCode(opts),
-                (UpdateDepositOptions opts) => RunUpdateDepositAndReturnExitCode(opts),
-                (NewWithdrawalOptions opts) => RunNewWithdrawalAndReturnExitCode(opts),
-                (UpdateWithdrawalOptions opts) => RunUpdateWithdrawalAndReturnExitCode(opts),
+                (NewOptions opts) => RunNew(opts),
+                (ShowOptions opts) => RunShow(opts),
+                (NewDepositOptions opts) => RunNewDeposit(opts),
+                (UpdateDepositOptions opts) => RunUpdateDeposit(opts),
+                (NewWithdrawalOptions opts) => RunNewWithdrawal(opts),
+                (UpdateWithdrawalOptions opts) => RunUpdateWithdrawal(opts),
                 errs => 1);
         }
     }

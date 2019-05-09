@@ -17,8 +17,8 @@ namespace test
         {
             [Option("showsql", Default = false, HelpText = "Show SQL commands")]
             public bool ShowSql { get; set; }
-            [Option('f', "filename", Required = true, HelpText = "Wallet filename")]
-            public string Filename { get; set; }
+            [Option('n', "dbname", Required = true, HelpText = "Wallet database name")]
+            public string DbName { get; set; }
         }
 
         class MinConfOptions : CommonOptions
@@ -131,6 +131,13 @@ namespace test
             public string Tag { get; set; }
         }
 
+        [Verb("delete_tx", HelpText = "Delete wallet transactions")]
+        class DeleteTxOptions : CommonOptions
+        { 
+            [Option('t', "txid", Required = true, HelpText = "TxId of transaction to delete")]
+            public string TxId { get; set; }
+        }
+
         static ILogger _logger = null;
         static ILogger GetLogger()
         {
@@ -164,19 +171,19 @@ namespace test
             }
         }
 
-        static string GetWalletType(string filename)
+        static string GetWalletType(string dbName)
         {
-            using (var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename, false))
+            using (var db = BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbName, false))
                 return Util.GetWalletType(db);
         }
 
-        static IWallet CreateWallet(string filename, string walletType, bool showSql)
+        static IWallet CreateWallet(string dbName, string walletType, bool showSql)
         {
             walletType = walletType.ToUpper();
-            GetLogger().LogDebug("Creating wallet ({0}) for testnet using file: '{1}'", walletType, filename);
+            GetLogger().LogDebug("Creating wallet ({0}) for testnet using db: '{1}'", walletType, dbName);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateSqliteWalletContext<WalletContext>(filename, showSql);
+            var db = BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbName, showSql);
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
@@ -204,8 +211,8 @@ namespace test
 
         static IWallet OpenWallet(CommonOptions opts)
         {
-            var walletType = GetWalletType(opts.Filename);
-            var wallet = CreateWallet(opts.Filename, walletType, opts.ShowSql);
+            var walletType = GetWalletType(opts.DbName);
+            var wallet = CreateWallet(opts.DbName, walletType, opts.ShowSql);
             if (wallet == null)
                 Console.WriteLine("Unable to determine wallet type (%s)", walletType);
             return wallet;
@@ -213,7 +220,7 @@ namespace test
 
         static int RunNew(NewOptions opts)
         {
-            var wallet = CreateWallet(opts.Filename, opts.Type, opts.ShowSql);
+            var wallet = CreateWallet(opts.DbName, opts.Type, opts.ShowSql);
             wallet.Save();
             return 0;
         }
@@ -424,11 +431,21 @@ namespace test
             return 0;
         }
 
+        static int RunDeleteTx(DeleteTxOptions opts)
+        {
+            var wallet = OpenWallet(opts);
+            if (wallet == null)
+                return 1;
+            wallet.DeleteTransaction(opts.TxId);
+            wallet.Save();
+            return 0;
+        }
+
         static int Main(string[] args)
         {
             return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, BalanceExcludeOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions>(args)
+                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
@@ -444,6 +461,7 @@ namespace test
                 (ConsolidateExcludeOptions opts) => RunConsolidateExclude(opts),
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
+                (DeleteTxOptions opts) => RunDeleteTx(opts),
                 errs => 1);
         }
     }

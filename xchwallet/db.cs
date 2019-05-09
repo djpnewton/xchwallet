@@ -74,13 +74,26 @@ namespace xchwallet
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
+        public static T CreateMySqlWalletContext<T>(string connString, bool logToConsole)
+            where T : DbContext
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<T>();
+            optionsBuilder.UseMySql(connString);
+            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
+        }
+
         public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole)
             where T : DbContext
         {
             var connString = $"host={host};database={dbName};uid={uid};password={pwd};";
-            var optionsBuilder = new DbContextOptionsBuilder<T>();
-            optionsBuilder.UseMySql(connString);
-            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
+            return CreateMySqlWalletContext<T>(connString, logToConsole);
+        }
+
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, bool logToConsole)
+            where T : DbContext
+        {
+            var connString = $"host={host};database={dbName};";
+            return CreateMySqlWalletContext<T>(connString, logToConsole);
         }
 
         bool logToConsole;
@@ -257,6 +270,22 @@ namespace xchwallet
         public WalletTx TxGet(WalletAddr addr, ChainTx tx)
         {
             return WalletTxs.SingleOrDefault(t => t.WalletAddrId == addr.Id && t.ChainTxId == tx.Id);
+        }
+
+        public void TxDelete(string txid)
+        {
+            var ctx = ChainTxs.SingleOrDefault(t => t.TxId == txid);
+            if (ctx != null)
+            {
+                var txs = WalletTxs.Where(t => t.ChainTxId == ctx.Id);
+                foreach (var tx in txs)
+                {
+                    var pendingSpend = WalletPendingSpends.SingleOrDefault(s => s.WalletTxId == tx.Id);
+                    if (pendingSpend != null)
+                        WalletPendingSpends.Remove(pendingSpend);
+                    WalletTxs.Remove(tx);
+                }
+            }
         }
 
         public IEnumerable<WalletTx> TxsUnAckedGet(string address)
