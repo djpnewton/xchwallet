@@ -27,7 +27,7 @@
         src: https://bitcoincore.org/bin/bitcoin-core-{{version}}/{{bitcoinfile}}
         dest: /home/bitcoin/
         remote_src: yes
-        creates: /home/bitcoin/bitcoin-{{version}}
+        creates: /home/bitcoin/bitcoin-{{version_without_build}}/bin/bitcoind
 
     - name: copy bitcoin-cli binary
       copy:
