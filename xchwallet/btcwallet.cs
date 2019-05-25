@@ -239,6 +239,16 @@ namespace xchwallet
             var addrs = GetAddresses(tag);
             var candidates = new List<Tuple<WalletAddr, Coin>>();
             var utxos = client.GetUTXOs(pubkey);
+            foreach (var utxo in utxos.Unconfirmed.UTXOs)
+            {
+                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                foreach (var addr in addrs)
+                    if (addrStr == addr.Address)
+                    {
+                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
+                        break;
+                    }
+            }
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
@@ -357,14 +367,14 @@ namespace xchwallet
                 return WalletError.InsufficientFunds;
             // adjust fee rate by reducing the output incrementally
             var feeRate = new FeeRate(new Money(0));
-            Money currentSatsPerByte = 0;
-            while (currentSatsPerByte < feeUnit)
+            decimal currentSatsPerByte = 0;
+            while (currentSatsPerByte < (decimal)feeUnit)
             {
                 tx.Outputs[0].Value -= 1;
                 amount -= 1;
 
                 feeRate = GetFeeRate(tx, toBeSpent);
-                currentSatsPerByte = feeRate.FeePerK / 1024;
+                currentSatsPerByte = feeRate.SatoshiPerByte;
             }
             // sign inputs
             var coins = from a in toBeSpent select a.Item2;
