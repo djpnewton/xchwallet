@@ -6,8 +6,5 @@
 
   tasks:
     - name: install openjdk 8
-      apt: name={{item}} state=latest
-      with_items:
-        - openjdk-8-jdk
-        - openjdk-8-jre
-        - ca-certificates
+      apt:
+        name: ['openjdk-8-jdk', 'openjdk-8-jre', 'ca-certificates']

@@ -208,7 +208,7 @@ namespace WavesCS
                 tx["chainId"] = ChainId;
                 return Transaction.FromJson(tx);
             }
-            catch(Exception e){
+            catch {
                 return null;
             }           
         }
