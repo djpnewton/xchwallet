@@ -242,22 +242,16 @@ namespace xchwallet
             foreach (var utxo in utxos.Unconfirmed.UTXOs)
             {
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
-                foreach (var addr in addrs)
-                    if (addrStr == addr.Address)
-                    {
-                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-                        break;
-                    }
+                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                if (addr != null)
+                    candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
             }
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
-                foreach (var addr in addrs)
-                    if (addrStr == addr.Address)
-                    {
-                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-                        break;
-                    }
+                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                if (addr != null)
+                    candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
             }
             // add inputs until we can satisfy our output
             BigInteger totalInput = 0;
