@@ -131,11 +131,16 @@ namespace test
             public string Tag { get; set; }
         }
 
-        [Verb("delete_tx", HelpText = "Delete wallet transactions")]
+        [Verb("delete_tx", HelpText = "Delete wallet transaction")]
         class DeleteTxOptions : CommonOptions
         { 
             [Option('t', "txid", Required = true, HelpText = "TxId of transaction to delete")]
             public string TxId { get; set; }
+        }
+
+        [Verb("delete_txs_all", HelpText = "Delete *all* wallet transactions")]
+        class DeleteTxsOptions : CommonOptions
+        {
         }
 
         static ILogger _logger = null;
@@ -441,11 +446,23 @@ namespace test
             return 0;
         }
 
+        static int RunDeleteTxs(DeleteTxsOptions opts)
+        {
+            var wallet = OpenWallet(opts);
+            if (wallet == null)
+                return 1;
+            foreach (var tag in wallet.GetTags())
+                foreach (var tx in wallet.GetTransactions(tag.Tag))
+                    wallet.DeleteTransaction(tx.ChainTx.TxId);
+            wallet.Save();
+            return 0;
+        }
+
         static int Main(string[] args)
         {
             return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, BalanceExcludeOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions>(args)
+                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions, DeleteTxsOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
@@ -462,6 +479,7 @@ namespace test
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
                 (DeleteTxOptions opts) => RunDeleteTx(opts),
+                (DeleteTxsOptions opts) => RunDeleteTxs(opts),
                 errs => 1);
         }
     }
