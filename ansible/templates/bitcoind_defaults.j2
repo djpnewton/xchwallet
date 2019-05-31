@@ -1,4 +1,4 @@
 BITCOIND_PID_FILE=/home/bitcoin/bitcoind.pid
 BITCOIND_CONF=/home/bitcoin/.bitcoin/bitcoin.conf
 BITCOIND_DATA_DIR=/home/bitcoin/.bitcoin
-BITCOIND_EXTRAARGS="-rpcbind=0.0.0.0 -rpcuser=user -rpcpassword=pass {{ (DEPLOY_TYPE == "production") | ternary("","-testnet") }}"
+BITCOIND_EXTRAARGS="-whitelist=10.0.0.0/8 -whitelist=127.0.0.1 -rpcallowip=10.0.0.0/8 -rpcallowip=127.0.0.1 -rpcuser=user -rpcpassword=pass {{ (DEPLOY_TYPE == "production") | ternary("","-testnet") }}"
