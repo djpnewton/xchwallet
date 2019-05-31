@@ -7,6 +7,8 @@ using CommandLine;
 using CommandLine.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
+using RestSharp;
+using Newtonsoft.Json;
 using xchwallet;
 
 namespace test
@@ -36,7 +38,20 @@ namespace test
 
         [Verb("show", HelpText = "Show wallet details")]
         class ShowOptions : MinConfOptions
-        { }
+        {
+            /*
+            [Option("register_addrs", Default = false, HelpText = "Register addresses in NBXplorer (only effects BTC)")]
+            public bool RegisterAddrs { get; set; }
+            */
+            [Option("scan_addrs", Default = false, HelpText = "Scan addresses in NBXplorer (only effects BTC)")]
+            public bool ScanAddrs { get; set; }
+
+            [Option("check_with_blockexplorer", Default = false, HelpText = "Double check balance with block explorer (only effects BTC)")]
+            public bool CheckWithBlockExplorer { get; set; }
+
+            [Option('u', "update", Default = false, HelpText = "Update from blockchain")]
+            public bool Update { get; set; }
+        }
 
         [Verb("balance", HelpText = "Show total balance of wallet tags")]
         class BalanceOptions : MinConfOptions
@@ -59,9 +74,8 @@ namespace test
             public string Tag { get; set; }
         }
 
-        [Verb("pendingspend", HelpText = "Create pending spend")]
-        class PendingSpendOptions : CommonOptions
-        { 
+        class SpendOptionsBase : CommonOptions
+        {
             [Option('t', "tag", Required = true, HelpText = "Wallet tag to spend from")]
             public string Tag { get; set; }
 
@@ -70,6 +84,11 @@ namespace test
 
             [Option('a', "amount", Required = true, HelpText = "Amount in satoshis")]
             public ulong Amount { get; set; }
+        }
+
+        [Verb("pendingspend", HelpText = "Create pending spend")]
+        class PendingSpendOptions : SpendOptionsBase
+        {
         }
 
         [Verb("showpending", HelpText = "Show all pending spends")]
@@ -94,7 +113,7 @@ namespace test
         }
 
         [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
-        class SpendOptions : PendingSpendOptions
+        class SpendOptions : SpendOptionsBase
         { }
 
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
@@ -156,8 +175,7 @@ namespace test
 
         static void PrintWallet(IWallet wallet, int minConfs)
         {
-            wallet.UpdateFromBlockchain();
-
+            BigInteger totalBalance = 0;
             foreach (var tag in wallet.GetTags())
             {
                 Console.WriteLine($"{tag.Tag}:");
@@ -170,10 +188,12 @@ namespace test
                 var txs = wallet.GetTransactions(tag.Tag);
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
-                        Console.WriteLine($"    {tx}");
+                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {tx.ChainTx.Amount}, {tx.ChainTx.Fee}");
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
+                totalBalance += balance;
             }
+            Console.WriteLine($"\n::total balance: {totalBalance} ({wallet.AmountToString(totalBalance)} {wallet.Type()})");
         }
 
         static string GetWalletType(string dbName)
@@ -192,7 +212,7 @@ namespace test
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, false, new Uri("http://127.0.0.1:24444"), true);
+                return new BtcWallet(GetLogger(), db, false, new Uri("http://localhost:24444"));
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
@@ -230,13 +250,98 @@ namespace test
             return 0;
         }
 
+        static IRestResponse BtcApsComRequest(bool mainnet, string endpoint)
+        {
+            var url = "https://api.bitaps.com/btc/v1/blockchain";
+            if (!mainnet)
+                url = "https://api.bitaps.com/btc/testnet/v1/blockchain";
+            var client = new RestClient(url);
+            var req = new RestRequest(endpoint, DataFormat.Json);
+            return client.Get(req);
+        }
+
         static int RunShow(ShowOptions opts)
         {
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            /*
+            if (opts.RegisterAddrs)
+            {
+                if (wallet is BtcWallet)
+                {
+                    (var deposit, var change) = ((BtcWallet)wallet).ReserveAddressesInNBXplorer();
+                    Console.WriteLine($"New highest reserved deposit keypath {deposit.KeyPath} ({deposit.Address}");
+                    Console.WriteLine($"New highest reserved change keypath {change.KeyPath} ({change.Address}");
+                }
+                else
+                {
+                    Console.WriteLine("Error: not BTC wallet");
+                    return 1;
+                }
+            }
+            */
+            if (opts.ScanAddrs)
+            {
+                if (wallet is BtcWallet)
+                {
+                    var txs = wallet.GetChainTxs();
+                    var txsScan = new List<TxScan>();
+                    var count = 0;
+                    foreach (var tx in txs)
+                    {
+                        var resp = BtcApsComRequest(wallet.IsMainnet(), $"/transaction/{tx.TxId}");
+                        if (resp.StatusCode != System.Net.HttpStatusCode.OK)
+                        {
+                            Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                            return 1;
+                        }
+                        dynamic res = JsonConvert.DeserializeObject(resp.Content);
+                        txsScan.Add(new TxScan { TxId = tx.TxId, BlockHash = res.data.blockHash });
+                        Console.WriteLine(count++);
+                        System.Threading.Thread.Sleep(500);
+                    }
+                    ((BtcWallet)wallet).RescanNBXplorer(txsScan);
+                }
+                else
+                {
+                    Console.WriteLine("Error: not BTC wallet");
+                    return 1;
+                }
+            }
+            if (opts.CheckWithBlockExplorer)
+            {
+                if (wallet is BtcWallet)
+                {
+                    var count = 0;
+                    BigInteger balance = 0;
+                    foreach (var addr in wallet.GetAddresses())
+                    {
+                        var resp = BtcApsComRequest(wallet.IsMainnet(), $"/address/state/{addr.Address}");
+                        if (resp.StatusCode != System.Net.HttpStatusCode.OK)
+                        {
+                            Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                            return 1;
+                        }
+                        dynamic res = JsonConvert.DeserializeObject(resp.Content);
+                        balance += (long)res.data.balance;;
+                        Console.WriteLine(count++);
+                        System.Threading.Thread.Sleep(500);
+                    }
+                    Console.WriteLine($"::block explorer balance: {balance}, ({wallet.AmountToString(balance)} {wallet.Type()})\n");
+                }
+                else
+                {
+                    Console.WriteLine("Error: not BTC wallet");
+                    return 1;
+                }
+            }
+            if (opts.Update)
+            {
+                wallet.UpdateFromBlockchain();
+                wallet.Save();
+            }
             PrintWallet(wallet, opts.MinimumConfirmations);
-            wallet.Save();
             return 0;
         }
 

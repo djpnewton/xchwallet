@@ -12,6 +12,12 @@ using Microsoft.Extensions.Logging;
 
 namespace xchwallet
 {
+    public class TxScan
+    {
+        public string TxId { get; set; }
+        public string BlockHash { get; set; }
+    }
+
     public class BtcWallet : BaseWallet
     {
         public const string TYPE = "BTC";
@@ -86,7 +92,7 @@ namespace xchwallet
             var date = utxo.Timestamp.ToUnixTimeSeconds();
             var height = confirmed ? currentHeight - (utxo.Confirmations-1) : -1;
 
-            logger.LogInformation($"processing UTXO - txid {id} - destination addr {to}");
+            logger.LogInformation($"processing UTXO - txid {id} - destination addr {to} - value {utxo.Value}");
 
             var address = db.AddrGet(to.ToString());
             if (address == null)
@@ -106,6 +112,7 @@ namespace xchwallet
             {
                 ctx.Height = height;
                 ctx.Confirmations = utxo.Confirmations;
+                ctx.Amount = utxo.Value.Satoshi;
                 db.ChainTxs.Update(ctx);
             }
             var wtx = db.TxGet(address, ctx);
@@ -360,11 +367,11 @@ namespace xchwallet
             if (totalInput < amount)
                 return WalletError.InsufficientFunds;
             // adjust fee rate by reducing the output incrementally
-            var feeRate = new FeeRate(new Money(0));
+            var feeRate = new FeeRate(new Money(0L));
             decimal currentSatsPerByte = 0;
             while (currentSatsPerByte < (decimal)feeUnit)
             {
-                tx.Outputs[0].Value -= 1;
+                tx.Outputs[0].Value -= 1L;
                 amount -= 1;
 
                 feeRate = GetFeeRate(tx, toBeSpent);
@@ -422,5 +429,65 @@ namespace xchwallet
             var d = decimal.Parse(value) / _scale;
             return (BigInteger)d;
         }
+
+        public bool RescanNBXplorer(IEnumerable<TxScan> txs)
+        {
+            var req = new RescanRequest();
+            foreach (var tx in txs)
+                req.Transactions.Add(new RescanRequest.TransactionToRescan { TransactionId = uint256.Parse(tx.TxId), BlockId = uint256.Parse(tx.BlockHash) });
+            client.Rescan(req);
+            return true;
+        }
+        /*
+        (int type, int num) ParseKeyPath(string keyPath)
+        {
+            var parts = keyPath.Split(new[] { '/' });
+            System.Diagnostics.Debug.Assert(parts.Length == 2);
+            var type = int.Parse(parts[0]);
+            var num = int.Parse(parts[1]);
+            System.Diagnostics.Debug.Assert(type == 0 || type == 1);
+            return (type, num);
+        }
+
+        public (KeyPathInformation deposit, KeyPathInformation change) ReserveAddressesInNBXplorer()
+        {
+            // init keypaths
+            var deposit = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
+            var change = client.GetUnused(pubkey, DerivationFeature.Change, reserve: true);
+            foreach (var addr in db.WalletAddrs)
+            {
+                (var type, var num) = ParseKeyPath(addr.Path);
+                if (type == 0)
+                {
+                    // deposit
+                    (var typeD, var numD) = ParseKeyPath(deposit.KeyPath.ToString());
+                    System.Diagnostics.Debug.Assert(type == typeD);
+                    while (num > numD)
+                    {
+                        // reserve another address
+                        deposit = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
+                        (typeD, numD) = ParseKeyPath(deposit.KeyPath.ToString());
+                    }
+                    if (num == numD)
+                        System.Diagnostics.Debug.Assert(addr.Address == deposit.Address);
+                }
+                else
+                {
+                    // change
+                    (var typeC, var numC) = ParseKeyPath(change.KeyPath.ToString());
+                    System.Diagnostics.Debug.Assert(type == typeC);
+                    while (num > numC)
+                    {
+                        // reserve another address
+                        change = client.GetUnused(pubkey, DerivationFeature.Change, reserve: true);
+                        (typeC, numC) = ParseKeyPath(change.KeyPath.ToString());
+                    }
+                    if (num == numC)
+                        System.Diagnostics.Debug.Assert(addr.Address == change.Address);
+                }
+            }
+            return (deposit, change);
+        }
+        */
     }
 }

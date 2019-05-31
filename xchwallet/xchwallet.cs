@@ -94,8 +94,10 @@ namespace xchwallet
         WalletAddr NewOrExistingAddress(string tag);
         void UpdateFromBlockchain();
         IEnumerable<WalletAddr> GetAddresses(string tag);
+        IEnumerable<WalletAddr> GetAddresses();
         IEnumerable<WalletTx> GetTransactions(string tag);
         IEnumerable<WalletTx> GetAddrTransactions(string address);
+        IEnumerable<ChainTx> GetChainTxs();
         void DeleteTransaction(string txid);
         BigInteger GetBalance(string tag, int minConfs=0);
         BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
@@ -246,6 +248,16 @@ namespace xchwallet
         public IEnumerable<WalletAddr> GetAddresses(string tag)
         {
             return db.AddrsGet(tag);
+        }
+
+        public IEnumerable<WalletAddr> GetAddresses()
+        {
+            return db.WalletAddrs;
+        }
+
+        public IEnumerable<ChainTx> GetChainTxs()
+        {
+            return db.ChainTxs;
         }
 
         public void DeleteTransaction(string txid)
