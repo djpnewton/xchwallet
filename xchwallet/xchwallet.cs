@@ -280,17 +280,14 @@ namespace xchwallet
                 return total;
             foreach (var tx in addr.Txs)
             {
-                if (tx.Direction == WalletDirection.Incomming)
-                {
-                    if (minConfs > 0 && tx.ChainTx.Confirmations < minConfs)
-                        continue;
-                    total += tx.ChainTx.Amount;
-                }
-                else if (tx.Direction == WalletDirection.Outgoing)
-                {
-                    total -= tx.ChainTx.Amount;
+                if (minConfs >= 0 || tx.ChainTx.Confirmations > minConfs)
+                    foreach (var ti in tx.ChainTx.ChainTxInputs.Where(ti => ti.Input.To == addr.Address))
+                        total += ti.Input.Amount;
+                foreach (var to in tx.ChainTx.ChainTxOutputs.Where(to => to.Output.From == addr.Address))
+                    total -= to.Output.Amount;
+                //TODO: grrr
+                if (tx.Direction == WalletDirection.Outgoing)
                     total -= tx.ChainTx.Fee;
-                }
             }
             return total;
         }

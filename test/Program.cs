@@ -188,7 +188,12 @@ namespace test
                 var txs = wallet.GetTransactions(tag.Tag);
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
-                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {tx.ChainTx.Amount}, {tx.ChainTx.Fee}");
+                    {
+                        var amount = tx.ChainTx.AmountIncomming();
+                        if (tx.Direction == WalletDirection.Outgoing)
+                            amount = tx.ChainTx.AmountOutgoing();
+                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {amount}, {tx.ChainTx.Fee}");
+                    }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
                 totalBalance += balance;
@@ -212,7 +217,7 @@ namespace test
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, false, new Uri("http://localhost:24444"));
+                return new BtcWallet(GetLogger(), db, false, new Uri("http://10.50.1.100:24444"));
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)

@@ -179,6 +179,10 @@ namespace xchwallet
 
     public class WalletContext : BaseContext
     {
+        public DbSet<ChainTxOutput> ChainTxOutputs { get; set; }
+        public DbSet<ChainTxInput> ChainTxInputs { get; set; }
+        public DbSet<ChainOutput> ChainOutputs { get; set; }
+        public DbSet<ChainInput> ChainInputs { get; set; }
         public DbSet<ChainTx> ChainTxs { get; set; }
         public DbSet<ChainAttachment> ChainAttachments { get; set; }
         public DbSet<WalletTag> WalletTags { get; set; }
@@ -212,12 +216,39 @@ namespace xchwallet
                 .HasIndex(a => a.Address)
                 .IsUnique();
 
+            builder.Entity<ChainOutput>()
+                .Property(t => t.Amount)
+                .HasConversion(bigIntConverter);
+
+            builder.Entity<ChainInput>()
+                .Property(t => t.Amount)
+                .HasConversion(bigIntConverter);
+
+            builder.Entity<ChainTxOutput>()
+                .HasKey(to => new { to.ChainTxId, to.ChainOutputId });
+            builder.Entity<ChainTxOutput>()
+                .HasOne(to => to.ChainTx)
+                .WithMany(tx => tx.ChainTxOutputs)
+                .HasForeignKey(to => to.ChainTxId);
+            builder.Entity<ChainTxOutput>()
+                .HasOne(to => to.Output)
+                .WithMany(o => o.ChainTxOutputs)
+                .HasForeignKey(to => to.ChainOutputId);
+
+            builder.Entity<ChainTxInput>()
+                .HasKey(ti => new { ti.ChainTxId, ti.ChainInputId });
+            builder.Entity<ChainTxInput>()
+                .HasOne(ti => ti.ChainTx)
+                .WithMany(tx => tx.ChainTxInputs)
+                .HasForeignKey(ti => ti.ChainTxId);
+            builder.Entity<ChainTxInput>()
+                .HasOne(ti => ti.Input)
+                .WithMany(i => i.ChainTxInputs)
+                .HasForeignKey(ti => ti.ChainInputId);
+
             builder.Entity<ChainTx>()
                 .HasIndex(t => t.TxId)
                 .IsUnique();
-            builder.Entity<ChainTx>()
-                .Property(t => t.Amount)
-                .HasConversion(bigIntConverter);
             builder.Entity<ChainTx>()
                 .Property(t => t.Fee)
                 .HasConversion(bigIntConverter);
@@ -306,6 +337,26 @@ namespace xchwallet
             return ChainTxs.SingleOrDefault(t => t.TxId == txid);
         }
 
+        public ChainOutput ChainOutputGet(string txid, uint n)
+        {
+            return ChainOutputs.SingleOrDefault(o => o.TxId == txid && o.N == n);
+        }
+
+        public ChainInput ChainInputGet(string txid, uint n)
+        {
+            return ChainInputs.SingleOrDefault(i => i.TxId == txid && i.N == n);
+        }
+
+        public ChainTxInput ChainTxInputGet(int chainTxId, int chainInputId)
+        {
+            return ChainTxInputs.SingleOrDefault(i => i.ChainTxId == chainTxId && i.ChainInputId == chainInputId);
+        }
+
+        public ChainTxOutput ChainTxOutputGet(int chainTxId, int chainOutputId)
+        {
+            return ChainTxOutputs.SingleOrDefault(o => o.ChainTxId == chainTxId && o.ChainOutputId == chainOutputId);
+        }
+
         public WalletPendingSpend PendingSpendGet(string spendCode)
         {
             return WalletPendingSpends.SingleOrDefault(s => s.SpendCode == spendCode);
@@ -334,15 +385,102 @@ namespace xchwallet
         }
     }
 
+    public class ChainTxOutput
+    {
+        public int ChainTxId { get; set; }
+        public virtual ChainTx ChainTx { get; set; }
+        public int ChainOutputId { get; set; }
+        public virtual ChainOutput Output { get; set; }
+
+        public ChainTxOutput()
+        {}
+
+        public ChainTxOutput(ChainTx tx, ChainOutput output)
+        {
+            this.ChainTx = tx;
+            this.Output = output;
+        }
+    }
+
+    public class ChainTxInput
+    {
+        public int ChainTxId { get; set; }
+        public virtual ChainTx ChainTx { get; set; }
+        public int ChainInputId { get; set; }
+        public virtual ChainInput Input { get; set; }
+
+        public ChainTxInput()
+        {}
+
+        public ChainTxInput(ChainTx tx, ChainInput input)
+        {
+            this.ChainTx = tx;
+            this.Input = input;
+        }
+    }
+
+    public class BaseOutput
+    {
+        public int Id { get; set; }
+        public string TxId { get; set; }
+        public uint N { get; set; }
+        public string From { get; set; }
+        public string To { get; set; }
+        [Column(TypeName = "varchar(255)")]
+        public BigInteger Amount { get; set; }
+
+        public BaseOutput()
+        {
+            this.TxId = null;
+            this.N = 0;
+            this.To = null;
+            this.Amount = 0;
+        }
+
+        public BaseOutput(string txid, uint n, string from, string to, BigInteger amount)
+        {
+            this.TxId = txid;
+            this.N = n;
+            this.From = from;
+            this.To = to;
+            this.Amount = amount;
+        }
+
+        public override string ToString()
+        {
+            return $"<{N} {From} {To} {Amount}>";
+        }
+    }
+
+    public class ChainOutput : BaseOutput
+    {
+        public virtual IEnumerable<ChainTxOutput> ChainTxOutputs { get; set; }
+
+        public ChainOutput() : base()
+        {}
+
+        public ChainOutput(string txid, uint n, string from, string to, BigInteger amount) : base(txid, n, from, to, amount)
+        {}
+    }
+
+    public class ChainInput : BaseOutput
+    {
+        public virtual IEnumerable<ChainTxInput> ChainTxInputs { get; set; }
+
+        public ChainInput() : base()
+        { }
+
+        public ChainInput(string txid, uint n, string from, string to, BigInteger amount) : base(txid, n, from, to, amount)
+        { }
+    }
+
     public class ChainTx
     {
         public int Id { get; set; }
         public string TxId { get; set; }
         public long Date { get; set; }
-        public string From { get; set; }
-        public string To { get; set; }
-        [Column(TypeName = "varchar(255)")]
-        public BigInteger Amount { get; set; }
+        public virtual IEnumerable<ChainTxInput> ChainTxInputs { get; set; }
+        public virtual IEnumerable<ChainTxOutput> ChainTxOutputs { get; set; }
         [Column(TypeName = "varchar(255)")]
         public BigInteger Fee { get; set; }
         public long Height { get; set; }
@@ -353,32 +491,48 @@ namespace xchwallet
         {
             this.TxId = null;
             this.Date = 0;
-            this.From = null;
-            this.To = null;
-            this.Amount = 0;
             this.Fee = 0;
             this.Height = -1;
             this.Confirmations = 0;
         }
 
-        public ChainTx(string txid, long date, string from, string to, BigInteger amount, BigInteger fee, long height, long confirmations)
+        public ChainTx(string txid, long date, BigInteger fee, long height, long confirmations)
         {
             this.TxId = txid;
             this.Date = date;
-            this.From = from;
-            this.To = to;
-            this.Amount = amount;
             this.Fee = fee;
             this.Height = height;
             this.Confirmations = confirmations;
         }
 
+        public BigInteger AmountIncomming()
+        {
+            BigInteger amount = 0;
+            foreach (var ti in ChainTxInputs)
+                amount += ti.Input.Amount;
+            return amount;
+        }
+
+        public BigInteger AmountOutgoing()
+        {
+            BigInteger amount = 0;
+            foreach (var ti in ChainTxOutputs)
+                amount += ti.Output.Amount;
+            return amount;
+        }
+
         public override string ToString()
         {
+            string ins = null;
+            foreach (var ti in ChainTxInputs)
+                ins += ti.Input.ToString() + "-";
+            string outs = null;
+            foreach (var to in ChainTxOutputs)
+                outs += to.Output.ToString() + "-";
             string att = null;
             if (Attachment != null)
                 att = System.Text.Encoding.UTF8.GetString(Attachment.Data);
-            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Height} {Confirmations} '{att}'>";
+            return $"<{TxId} {Date} {ins} {outs} {Fee} {Height} {Confirmations} '{att}'>";
         }
     }
 

@@ -101,20 +101,34 @@ namespace xchwallet
                 return;
             }
 
+            // add/update chain tx
             var ctx = db.ChainTxGet(id);
             if (ctx == null)
             {
-                ctx = new ChainTx(id, date, "", to.ToString(),
-                    utxo.Value.Satoshi, -1, height, utxo.Confirmations);
+                ctx = new ChainTx(id, date, -1, height, utxo.Confirmations);
                 db.ChainTxs.Add(ctx);
             }
             else
             {
                 ctx.Height = height;
                 ctx.Confirmations = utxo.Confirmations;
-                ctx.Amount = utxo.Value.Satoshi;
                 db.ChainTxs.Update(ctx);
             }
+            // add input
+            var input = db.ChainInputGet(id, utxo.Outpoint.N);
+            if (input == null)
+            {
+                input = new ChainInput(id, utxo.Outpoint.N, null, to.ToString(), utxo.Value.Satoshi);
+                db.ChainInputs.Add(input);
+            }
+            // link input
+            var link = db.ChainTxInputGet(ctx.Id, input.Id);
+            if (link == null)
+            {
+                link = new ChainTxInput(ctx, input);
+                db.ChainTxInputs.Add(link);
+            }
+            // add/update wallet tx
             var wtx = db.TxGet(address, ctx);
             if (wtx == null)
             {
@@ -212,8 +226,12 @@ namespace xchwallet
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var ctx = new ChainTx(txid, date, from.Address, to, amount, fee, -1, 0);
+            var ctx = new ChainTx(txid, date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
+            var output = new ChainOutput(txid, 0, from.Address, to, amount);
+            db.ChainOutputs.Add(output);
+            var txoutput = new ChainTxOutput(ctx, output);
+            db.ChainTxOutputs.Add(txoutput);
             var wtx = new WalletTx{ChainTx=ctx, Address=from, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
             if (meta != null)
