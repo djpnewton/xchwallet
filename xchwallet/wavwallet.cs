@@ -6,6 +6,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using WavesCS;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
@@ -66,18 +67,20 @@ namespace xchwallet
             return address;
         }
 
-        public override void UpdateFromBlockchain()
+        public override IDbContextTransaction UpdateFromBlockchain()
         {
+            var dbTransaction = db.Database.BeginTransaction();
             var blockHeight = (long)node.GetObject("blocks/height")["height"];
-            var addedTxs = new List<ChainTx>();
             foreach (var tag in GetTags())
-            {
                 foreach (var addr in tag.Addrs)
-                    UpdateTxs(addr, addedTxs, blockHeight);
-            }
+                { 
+                    UpdateTxs(addr, blockHeight);
+                    db.SaveChanges();
+                }
+            return dbTransaction;
         }
 
-        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs, long blockHeight)
+        void UpdateTxs(WalletAddr address, long blockHeight)
         {
             var sufficientTxsQueried = false;
             var processedTxs = new Dictionary<string, TransferTransaction>();
@@ -112,18 +115,12 @@ namespace xchwallet
                             var confs = trans.Height > 0 ? (blockHeight - trans.Height) + 1 : 0;
                             var attachment = trans.Attachment;
 
+                            // add/update chain tx
                             var ctx = db.ChainTxGet(id);
                             if (ctx == null)
                             {
-                                // if we already have a pending addition to the db we
-                                // not create a new one or update it
-                                ctx = addedTxs.SingleOrDefault(t => t.TxId == id);
-                                if (ctx == null)
-                                {
-                                    ctx = new ChainTx(id, date, trans.Sender, trans.Recipient, amount, fee, trans.Height, confs);
-                                    db.ChainTxs.Add(ctx);
-                                    addedTxs.Add(ctx);
-                                }
+                                ctx = new ChainTx(id, date, fee, trans.Height, confs);
+                                db.ChainTxs.Add(ctx);
                             }
                             else
                             {
@@ -133,14 +130,35 @@ namespace xchwallet
                                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
                                 sufficientTxsQueried = true;
                             }
-                            if (attachment != null && attachment.Length > 0)
+                            if (ctx.Attachment == null && attachment != null && attachment.Length > 0)
                             {
-                                if (ctx.Attachment == null)
+                                var att = new ChainAttachment(ctx, attachment);
+                                db.ChainAttachments.Add(att);
+                            }
+                            // add updates
+                            if (trans.Recipient == address.Address)
+                            {
+                                var up = db.BalanceUpdateGet(id, true, 0);
+                                if (up == null)
                                 {
-                                    var att = new ChainAttachment(ctx, attachment);
-                                    db.ChainAttachments.Add(att);
+                                    up = new BalanceUpdate(id, true, 0, amount);
+                                    up.ChainTx = ctx;
+                                    up.WalletAddr = address;
+                                    db.BalanceUpdates.Add(up);
                                 }
                             }
+                            if (trans.Sender == address.Address)
+                            {
+                                var up = db.BalanceUpdateGet(id, false, 0);
+                                if (up == null)
+                                {
+                                    up = new BalanceUpdate(id, false, 0, amount + fee);
+                                    up.ChainTx = ctx;
+                                    up.WalletAddr = address;
+                                    db.BalanceUpdates.Add(up);
+                                }
+                            }
+                            // add / update wallet tx
                             var wtx = db.TxGet(address, ctx);
                             if (wtx == null)
                             {
@@ -148,10 +166,7 @@ namespace xchwallet
                                 {
                                     // special case we are recipient and sender
                                     if (trans.Sender == address.Address)
-                                    {
-                                        ctx.Amount = 0;
                                         wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing, Acknowledged=false };
-                                    }
                                     else
                                         wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming, Acknowledged=false };
                                 }
@@ -271,11 +286,13 @@ namespace xchwallet
             var address = db.AddrGet(from);
             var amount = asset.AmountToLong(signedTx.Amount);
             var fee = asset.AmountToLong(signedTx.Fee);
-            if (from == signedTx.Recipient) // special case if we send to ourselves
-                amount = 0;
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
-            var ctx = new ChainTx(signedTx.GenerateId(), date, from, signedTx.Recipient, amount, fee, -1, 0);
+            var ctx = new ChainTx(signedTx.GenerateId(), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
+            var up = new BalanceUpdate(signedTx.GenerateId(), false, 0, amount + fee);
+            up.ChainTx = ctx;
+            up.WalletAddr = address;
+            db.BalanceUpdates.Add(up);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
             if (meta != null)

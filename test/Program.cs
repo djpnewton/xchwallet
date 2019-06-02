@@ -189,10 +189,9 @@ namespace test
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
                     {
-                        var amount = tx.ChainTx.AmountIncomming();
-                        if (tx.Direction == WalletDirection.Outgoing)
-                            amount = tx.ChainTx.AmountOutgoing();
-                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {amount}, {tx.ChainTx.Fee}");
+                        var in_ = tx.ChainTx.AmountIncomming();
+                        var out_ = tx.ChainTx.AmountOutgoing();
+                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {in_-out_} (in {in_}, out {out_}), {tx.ChainTx.Fee}");
                     }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
@@ -329,8 +328,8 @@ namespace test
                             return 1;
                         }
                         dynamic res = JsonConvert.DeserializeObject(resp.Content);
-                        balance += (long)res.data.balance;;
-                        Console.WriteLine(count++);
+                        balance += (long)res.data.balance + (long)res.data.pendingReceivedAmount - (long)res.data.pendingSentAmount;
+                        Console.WriteLine($"{count++} - {resp.ResponseUri}");
                         System.Threading.Thread.Sleep(500);
                     }
                     Console.WriteLine($"::block explorer balance: {balance}, ({wallet.AmountToString(balance)} {wallet.Type()})\n");
@@ -343,8 +342,9 @@ namespace test
             }
             if (opts.Update)
             {
-                wallet.UpdateFromBlockchain();
+                var dbTransaction = wallet.UpdateFromBlockchain();
                 wallet.Save();
+                dbTransaction.Commit();
             }
             PrintWallet(wallet, opts.MinimumConfirmations);
             return 0;

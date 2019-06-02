@@ -12,6 +12,7 @@ using Nethereum.Signer;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
@@ -99,17 +100,19 @@ namespace xchwallet
             }
         }
 
-        public override void UpdateFromBlockchain()
+        public override IDbContextTransaction UpdateFromBlockchain()
         {
-            var addedTxs = new List<ChainTx>();
+            var dbTransaction = db.Database.BeginTransaction();
             foreach (var tag in GetTags())
-            {
                 foreach (var addr in tag.Addrs)
-                    UpdateTxs(addr, addedTxs);
-            }
+                {
+                    UpdateTxs(addr);
+                    db.SaveChanges();
+                }
+            return dbTransaction;
         }
 
-        void UpdateTxs(WalletAddr address, List<ChainTx> addedTxs)
+        void UpdateTxs(WalletAddr address)
         {
             //TODO - add attachment
             // - read the 'data' field (https://ethereum.stackexchange.com/questions/2466/how-do-i-send-an-arbitary-message-to-an-ethereum-address)
@@ -124,19 +127,12 @@ namespace xchwallet
                 long confirmations = 0;
                 if (scantx.block_num > 0)
                     confirmations = blockNum - scantx.block_num;
+                // add/update chain tx
                 var ctx = db.ChainTxGet(scantx.txid);
                 if (ctx == null)
                 {
-                    // if we already have a pending addition to the db we
-                    // not create a new one or update it
-                    ctx = addedTxs.SingleOrDefault(t => t.TxId == scantx.txid);
-                    if (ctx == null)
-                    {
-                        ctx = new ChainTx(scantx.txid, scantx.date, scantx.from_, address.Address,
-                            BigInteger.Parse(scantx.value), -1, scantx.block_num, confirmations);
-                        db.ChainTxs.Add(ctx);
-                        addedTxs.Add(ctx);
-                    }
+                    ctx = new ChainTx(scantx.txid, scantx.date, -1, scantx.block_num, confirmations);
+                    db.ChainTxs.Add(ctx);
                 }
                 else
                 {
@@ -144,6 +140,16 @@ namespace xchwallet
                     ctx.Confirmations = confirmations;
                     db.ChainTxs.Update(ctx);
                 }
+                // add updates
+                var up = db.BalanceUpdateGet(scantx.txid, true, 0);
+                if (up == null)
+                {
+                    up = new BalanceUpdate(scantx.txid, true, 0, BigInteger.Parse(scantx.value));
+                    up.ChainTx = ctx;
+                    up.WalletAddr = address;
+                    db.BalanceUpdates.Add(up);
+                }
+                // add / update wallet tx
                 var wtx = db.TxGet(address, ctx);
                 if (wtx == null)
                 {
@@ -259,8 +265,12 @@ namespace xchwallet
             var fee = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasLimit.ToHex(), false) * HexBigIntegerConvertorExtensions.HexToBigInteger(tx.GasPrice.ToHex(), false);
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
-            var ctx = new ChainTx(tx.Hash.ToHex(true), date, from, tx.ReceiveAddress.ToHex(true), amount, fee, -1, 0);
+            var ctx = new ChainTx(tx.Hash.ToHex(true), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
+            var up = new BalanceUpdate(tx.Hash.ToHex(true), false, 0, amount + fee);
+            up.ChainTx = ctx;
+            up.WalletAddr = address;
+            db.BalanceUpdates.Add(up);
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
             if (meta != null)

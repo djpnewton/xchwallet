@@ -9,8 +9,8 @@ using xchwallet;
 namespace xchwallet.Migrations
 {
     [DbContext(typeof(WalletContext))]
-    [Migration("20190601023700_ChainOutputs")]
-    partial class ChainOutputs
+    [Migration("20190601194831_BalanceUpdates")]
+    partial class BalanceUpdates
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
@@ -18,6 +18,34 @@ namespace xchwallet.Migrations
             modelBuilder
                 .HasAnnotation("ProductVersion", "2.2.1-servicing-10028")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
+
+            modelBuilder.Entity("xchwallet.BalanceUpdate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<string>("Amount")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("ChainTxId");
+
+                    b.Property<bool>("Input");
+
+                    b.Property<uint>("N");
+
+                    b.Property<string>("TxId");
+
+                    b.Property<int>("WalletAddrId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChainTxId");
+
+                    b.HasIndex("WalletAddrId");
+
+                    b.ToTable("BalanceUpdates");
+                });
 
             modelBuilder.Entity("xchwallet.ChainAttachment", b =>
                 {
@@ -34,50 +62,6 @@ namespace xchwallet.Migrations
                         .IsUnique();
 
                     b.ToTable("ChainAttachments");
-                });
-
-            modelBuilder.Entity("xchwallet.ChainInput", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Amount")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("From");
-
-                    b.Property<uint>("N");
-
-                    b.Property<string>("To");
-
-                    b.Property<string>("TxId");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ChainInputs");
-                });
-
-            modelBuilder.Entity("xchwallet.ChainOutput", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Amount")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("From");
-
-                    b.Property<uint>("N");
-
-                    b.Property<string>("To");
-
-                    b.Property<string>("TxId");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ChainOutputs");
                 });
 
             modelBuilder.Entity("xchwallet.ChainTx", b =>
@@ -103,32 +87,6 @@ namespace xchwallet.Migrations
                         .IsUnique();
 
                     b.ToTable("ChainTxs");
-                });
-
-            modelBuilder.Entity("xchwallet.ChainTxInput", b =>
-                {
-                    b.Property<int>("ChainTxId");
-
-                    b.Property<int>("ChainInputId");
-
-                    b.HasKey("ChainTxId", "ChainInputId");
-
-                    b.HasIndex("ChainInputId");
-
-                    b.ToTable("ChainTxInputs");
-                });
-
-            modelBuilder.Entity("xchwallet.ChainTxOutput", b =>
-                {
-                    b.Property<int>("ChainTxId");
-
-                    b.Property<int>("ChainOutputId");
-
-                    b.HasKey("ChainTxId", "ChainOutputId");
-
-                    b.HasIndex("ChainOutputId");
-
-                    b.ToTable("ChainTxOutputs");
                 });
 
             modelBuilder.Entity("xchwallet.WalletAddr", b =>
@@ -271,37 +229,24 @@ namespace xchwallet.Migrations
                     b.ToTable("WalletTxMetas");
                 });
 
+            modelBuilder.Entity("xchwallet.BalanceUpdate", b =>
+                {
+                    b.HasOne("xchwallet.ChainTx", "ChainTx")
+                        .WithMany("BalanceUpdates")
+                        .HasForeignKey("ChainTxId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("xchwallet.WalletAddr", "WalletAddr")
+                        .WithMany("BalanceUpdates")
+                        .HasForeignKey("WalletAddrId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
             modelBuilder.Entity("xchwallet.ChainAttachment", b =>
                 {
                     b.HasOne("xchwallet.ChainTx", "Tx")
                         .WithOne("Attachment")
                         .HasForeignKey("xchwallet.ChainAttachment", "ChainTxId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("xchwallet.ChainTxInput", b =>
-                {
-                    b.HasOne("xchwallet.ChainInput", "Input")
-                        .WithMany("ChainTxInputs")
-                        .HasForeignKey("ChainInputId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("xchwallet.ChainTx", "ChainTx")
-                        .WithMany("ChainTxInputs")
-                        .HasForeignKey("ChainTxId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
-            modelBuilder.Entity("xchwallet.ChainTxOutput", b =>
-                {
-                    b.HasOne("xchwallet.ChainOutput", "Output")
-                        .WithMany("ChainTxOutputs")
-                        .HasForeignKey("ChainOutputId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("xchwallet.ChainTx", "ChainTx")
-                        .WithMany("ChainTxOutputs")
-                        .HasForeignKey("ChainTxId")
                         .OnDelete(DeleteBehavior.Cascade);
                 });
 

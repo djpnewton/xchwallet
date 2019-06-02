@@ -7,8 +7,8 @@ using NBitcoin;
 using NBXplorer;
 using NBXplorer.DerivationStrategy;
 using NBXplorer.Models;
-using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
@@ -114,19 +114,14 @@ namespace xchwallet
                 ctx.Confirmations = utxo.Confirmations;
                 db.ChainTxs.Update(ctx);
             }
-            // add input
-            var input = db.ChainInputGet(id, utxo.Outpoint.N);
-            if (input == null)
+            // add update
+            var up = db.BalanceUpdateGet(id, true, utxo.Outpoint.N);
+            if (up == null)
             {
-                input = new ChainInput(id, utxo.Outpoint.N, null, to.ToString(), utxo.Value.Satoshi);
-                db.ChainInputs.Add(input);
-            }
-            // link input
-            var link = db.ChainTxInputGet(ctx.Id, input.Id);
-            if (link == null)
-            {
-                link = new ChainTxInput(ctx, input);
-                db.ChainTxInputs.Add(link);
+                up = new BalanceUpdate(id, true, utxo.Outpoint.N, utxo.Value.Satoshi);
+                up.ChainTx = ctx;
+                up.WalletAddr = address;
+                db.BalanceUpdates.Add(up);
             }
             // add/update wallet tx
             var wtx = db.TxGet(address, ctx);
@@ -138,19 +133,28 @@ namespace xchwallet
             }
         }
 
-        public override void UpdateFromBlockchain()
+        public override IDbContextTransaction UpdateFromBlockchain()
         {
-            UpdateTxs();
+            var dbTransaction = db.Database.BeginTransaction();
+            UpdateTxs(dbTransaction);
             UpdateTxConfirmations(pubkey);
+            db.SaveChanges();
+            return dbTransaction;
         }
 
-        private void UpdateTxs()
+        private void UpdateTxs(IDbContextTransaction dbTransaction)
         {
             var utxos = client.GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)
+            {
                 processUtxo(item, utxos.CurrentHeight, false);
+                db.SaveChanges();
+            }
             foreach (var item in utxos.Confirmed.UTXOs)
+            {
                 processUtxo(item, utxos.CurrentHeight, true);
+                db.SaveChanges();
+            }
         }
 
         private void UpdateTxConfirmations(GetTransactionsResponse txs)
@@ -222,17 +226,22 @@ namespace xchwallet
             return addr;
         }
 
-        WalletTx AddOutgoingTx(string txid, WalletAddr from, string to, BigInteger amount, BigInteger fee, WalletTxMeta meta)
+        WalletTx AddOutgoingTx(string txid, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTxMeta meta)
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var ctx = new ChainTx(txid, date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
-            var output = new ChainOutput(txid, 0, from.Address, to, amount);
-            db.ChainOutputs.Add(output);
-            var txoutput = new ChainTxOutput(ctx, output);
-            db.ChainTxOutputs.Add(txoutput);
-            var wtx = new WalletTx{ChainTx=ctx, Address=from, Direction=WalletDirection.Outgoing};
+            uint n = 0;
+            foreach ((var addr, var coin, var _) in spent)
+            {
+                var up = new BalanceUpdate(txid, false, n, coin.Amount.Satoshi);
+                up.ChainTx = ctx;
+                up.WalletAddr = addr;
+                db.BalanceUpdates.Add(up);
+                n++;
+            }
+            var wtx = new WalletTx{ChainTx=ctx, Address=spent.First().Item1, Direction=WalletDirection.Outgoing};
             db.WalletTxs.Add(wtx);
             if (meta != null)
                 wtx.Meta = meta;
@@ -320,14 +329,12 @@ namespace xchwallet
             var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
-            // choose from address (TODO: handle multiple from addresses)
-            var fromAddr = toBeSpent.First().Item1;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
-                wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to, amount, fee.Satoshi, meta);
+                wtx = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to, amount, fee.Satoshi, meta);
                 return WalletError.Success;
             }
             else
@@ -403,14 +410,12 @@ namespace xchwallet
             var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
-            // choose from address (TODO: handle multiple from addresses)
-            var fromAddr = toBeSpent.First().Item1;
             // broadcast transaction
             var result = client.Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtx = AddOutgoingTx(tx.GetHash().ToString(), fromAddr, to.Address, amount, fee.Satoshi, null);
+                var wtx = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to.Address, amount, fee.Satoshi, null);
                 ((List<WalletTx>)wtxs).Add(wtx);
                 return WalletError.Success;
             }
