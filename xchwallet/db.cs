@@ -179,10 +179,7 @@ namespace xchwallet
 
     public class WalletContext : BaseContext
     {
-        public DbSet<ChainTxOutput> ChainTxOutputs { get; set; }
-        public DbSet<ChainTxInput> ChainTxInputs { get; set; }
-        public DbSet<ChainOutput> ChainOutputs { get; set; }
-        public DbSet<ChainInput> ChainInputs { get; set; }
+        public DbSet<BalanceUpdate> BalanceUpdates { get; set; }
         public DbSet<ChainTx> ChainTxs { get; set; }
         public DbSet<ChainAttachment> ChainAttachments { get; set; }
         public DbSet<WalletTag> WalletTags { get; set; }
@@ -216,35 +213,9 @@ namespace xchwallet
                 .HasIndex(a => a.Address)
                 .IsUnique();
 
-            builder.Entity<ChainOutput>()
+            builder.Entity<BalanceUpdate>()
                 .Property(t => t.Amount)
                 .HasConversion(bigIntConverter);
-
-            builder.Entity<ChainInput>()
-                .Property(t => t.Amount)
-                .HasConversion(bigIntConverter);
-
-            builder.Entity<ChainTxOutput>()
-                .HasKey(to => new { to.ChainTxId, to.ChainOutputId });
-            builder.Entity<ChainTxOutput>()
-                .HasOne(to => to.ChainTx)
-                .WithMany(tx => tx.ChainTxOutputs)
-                .HasForeignKey(to => to.ChainTxId);
-            builder.Entity<ChainTxOutput>()
-                .HasOne(to => to.Output)
-                .WithMany(o => o.ChainTxOutputs)
-                .HasForeignKey(to => to.ChainOutputId);
-
-            builder.Entity<ChainTxInput>()
-                .HasKey(ti => new { ti.ChainTxId, ti.ChainInputId });
-            builder.Entity<ChainTxInput>()
-                .HasOne(ti => ti.ChainTx)
-                .WithMany(tx => tx.ChainTxInputs)
-                .HasForeignKey(ti => ti.ChainTxId);
-            builder.Entity<ChainTxInput>()
-                .HasOne(ti => ti.Input)
-                .WithMany(i => i.ChainTxInputs)
-                .HasForeignKey(ti => ti.ChainInputId);
 
             builder.Entity<ChainTx>()
                 .HasIndex(t => t.TxId)
@@ -337,24 +308,9 @@ namespace xchwallet
             return ChainTxs.SingleOrDefault(t => t.TxId == txid);
         }
 
-        public ChainOutput ChainOutputGet(string txid, uint n)
+        public BalanceUpdate BalanceUpdateGet(string txid, bool input, uint n)
         {
-            return ChainOutputs.SingleOrDefault(o => o.TxId == txid && o.N == n);
-        }
-
-        public ChainInput ChainInputGet(string txid, uint n)
-        {
-            return ChainInputs.SingleOrDefault(i => i.TxId == txid && i.N == n);
-        }
-
-        public ChainTxInput ChainTxInputGet(int chainTxId, int chainInputId)
-        {
-            return ChainTxInputs.SingleOrDefault(i => i.ChainTxId == chainTxId && i.ChainInputId == chainInputId);
-        }
-
-        public ChainTxOutput ChainTxOutputGet(int chainTxId, int chainOutputId)
-        {
-            return ChainTxOutputs.SingleOrDefault(o => o.ChainTxId == chainTxId && o.ChainOutputId == chainOutputId);
+            return BalanceUpdates.SingleOrDefault(bu => bu.TxId == txid && bu.Input == input && bu.N == n);
         }
 
         public WalletPendingSpend PendingSpendGet(string spendCode)
@@ -385,93 +341,40 @@ namespace xchwallet
         }
     }
 
-    public class ChainTxOutput
-    {
-        public int ChainTxId { get; set; }
-        public virtual ChainTx ChainTx { get; set; }
-        public int ChainOutputId { get; set; }
-        public virtual ChainOutput Output { get; set; }
-
-        public ChainTxOutput()
-        {}
-
-        public ChainTxOutput(ChainTx tx, ChainOutput output)
-        {
-            this.ChainTx = tx;
-            this.Output = output;
-        }
-    }
-
-    public class ChainTxInput
-    {
-        public int ChainTxId { get; set; }
-        public virtual ChainTx ChainTx { get; set; }
-        public int ChainInputId { get; set; }
-        public virtual ChainInput Input { get; set; }
-
-        public ChainTxInput()
-        {}
-
-        public ChainTxInput(ChainTx tx, ChainInput input)
-        {
-            this.ChainTx = tx;
-            this.Input = input;
-        }
-    }
-
-    public class BaseOutput
+    public class BalanceUpdate
     {
         public int Id { get; set; }
+        public int ChainTxId { get; set; }
+        public int WalletAddrId { get; set; }
+        public virtual ChainTx ChainTx { get; set; }
+        public virtual WalletAddr WalletAddr { get; set; }
         public string TxId { get; set; }
+        public bool Input { get; set; }
         public uint N { get; set; }
-        public string From { get; set; }
-        public string To { get; set; }
         [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
 
-        public BaseOutput()
+        public BalanceUpdate()
         {
             this.TxId = null;
+            this.Input = false;
             this.N = 0;
-            this.To = null;
             this.Amount = 0;
         }
 
-        public BaseOutput(string txid, uint n, string from, string to, BigInteger amount)
+        public BalanceUpdate(string txid, bool input, uint n, BigInteger amount)
         {
             this.TxId = txid;
+            this.Input = input;
             this.N = n;
-            this.From = from;
-            this.To = to;
             this.Amount = amount;
         }
 
         public override string ToString()
         {
-            return $"<{N} {From} {To} {Amount}>";
+            var dir = Input ? "in" : "out";
+            return $"<{dir} {N}  {Amount}>";
         }
-    }
-
-    public class ChainOutput : BaseOutput
-    {
-        public virtual IEnumerable<ChainTxOutput> ChainTxOutputs { get; set; }
-
-        public ChainOutput() : base()
-        {}
-
-        public ChainOutput(string txid, uint n, string from, string to, BigInteger amount) : base(txid, n, from, to, amount)
-        {}
-    }
-
-    public class ChainInput : BaseOutput
-    {
-        public virtual IEnumerable<ChainTxInput> ChainTxInputs { get; set; }
-
-        public ChainInput() : base()
-        { }
-
-        public ChainInput(string txid, uint n, string from, string to, BigInteger amount) : base(txid, n, from, to, amount)
-        { }
     }
 
     public class ChainTx
@@ -479,8 +382,7 @@ namespace xchwallet
         public int Id { get; set; }
         public string TxId { get; set; }
         public long Date { get; set; }
-        public virtual IEnumerable<ChainTxInput> ChainTxInputs { get; set; }
-        public virtual IEnumerable<ChainTxOutput> ChainTxOutputs { get; set; }
+        public virtual IEnumerable<BalanceUpdate> BalanceUpdates { get; set; }
         [Column(TypeName = "varchar(255)")]
         public BigInteger Fee { get; set; }
         public long Height { get; set; }
@@ -508,31 +410,25 @@ namespace xchwallet
         public BigInteger AmountIncomming()
         {
             BigInteger amount = 0;
-            foreach (var ti in ChainTxInputs)
-                amount += ti.Input.Amount;
+            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == true))
+                amount += bu.Amount;
             return amount;
         }
 
         public BigInteger AmountOutgoing()
         {
             BigInteger amount = 0;
-            foreach (var ti in ChainTxOutputs)
-                amount += ti.Output.Amount;
+            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == false))
+                amount += bu.Amount;
             return amount;
         }
 
         public override string ToString()
         {
-            string ins = null;
-            foreach (var ti in ChainTxInputs)
-                ins += ti.Input.ToString() + "-";
-            string outs = null;
-            foreach (var to in ChainTxOutputs)
-                outs += to.Output.ToString() + "-";
             string att = null;
             if (Attachment != null)
                 att = System.Text.Encoding.UTF8.GetString(Attachment.Data);
-            return $"<{TxId} {Date} {ins} {outs} {Fee} {Height} {Confirmations} '{att}'>";
+            return $"<{TxId} {Date} +{AmountIncomming()} -{AmountOutgoing()} {Fee} {Height} {Confirmations} '{att}'>";
         }
     }
 
@@ -586,6 +482,7 @@ namespace xchwallet
         public int TagId { get; set; }
         public virtual WalletTag Tag { get; set; }
         public virtual IEnumerable<WalletTx> Txs { get; set; }
+        public virtual IEnumerable<BalanceUpdate> BalanceUpdates { get; set; }
 
         public string Path { get; set; }
         public int PathIndex { get; set; }
@@ -606,6 +503,33 @@ namespace xchwallet
             this.Path = path;
             this.PathIndex = pathIndex;
             this.Address = address;
+        }
+
+        public BigInteger AmountIncomming()
+        {
+            BigInteger amount = 0;
+            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == true))
+                amount += bu.Amount;
+            return amount;
+        }
+
+        public BigInteger AmountOutgoing()
+        {
+            BigInteger amount = 0;
+            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == false))
+                amount += bu.Amount;
+            return amount;
+        }
+
+        public BigInteger Balance(int minConfs=0)
+        {
+            BigInteger amount = 0;
+            foreach (var bu in BalanceUpdates)
+                if (bu.Input && (minConfs <= 0 || bu.ChainTx.Confirmations >= minConfs))
+                    amount += bu.Amount;
+                else
+                    amount -= bu.Amount;
+            return amount;
         }
 
         public override string ToString()

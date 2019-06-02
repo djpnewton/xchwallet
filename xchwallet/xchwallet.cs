@@ -92,7 +92,7 @@ namespace xchwallet
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
         WalletAddr NewOrExistingAddress(string tag);
-        void UpdateFromBlockchain();
+        IDbContextTransaction UpdateFromBlockchain();
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletAddr> GetAddresses();
         IEnumerable<WalletTx> GetTransactions(string tag);
@@ -118,7 +118,7 @@ namespace xchwallet
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
-        IDbContextTransaction BeginTransaction();
+        IDbContextTransaction BeginDbTransaction();
 
         void Save();
     }
@@ -128,7 +128,7 @@ namespace xchwallet
         public abstract bool IsMainnet();
         public abstract LedgerModel LedgerModel { get; }
         public abstract WalletAddr NewAddress(string tag);
-        public abstract void UpdateFromBlockchain();
+        public abstract IDbContextTransaction UpdateFromBlockchain();
         public abstract IEnumerable<WalletTx> GetTransactions(string tag);
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag, int minConfs=0);
@@ -275,21 +275,7 @@ namespace xchwallet
 
         public BigInteger GetAddrBalance(WalletAddr addr, int minConfs=0)
         {
-            BigInteger total = 0;
-            if (addr.Txs == null)
-                return total;
-            foreach (var tx in addr.Txs)
-            {
-                if (minConfs >= 0 || tx.ChainTx.Confirmations > minConfs)
-                    foreach (var ti in tx.ChainTx.ChainTxInputs.Where(ti => ti.Input.To == addr.Address))
-                        total += ti.Input.Amount;
-                foreach (var to in tx.ChainTx.ChainTxOutputs.Where(to => to.Output.From == addr.Address))
-                    total -= to.Output.Amount;
-                //TODO: grrr
-                if (tx.Direction == WalletDirection.Outgoing)
-                    total -= tx.ChainTx.Fee;
-            }
-            return total;
+            return addr.Balance(minConfs);
         }
 
         public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null)
@@ -403,7 +389,7 @@ namespace xchwallet
             db.WalletPendingSpends.Update(spend);
         }
 
-        public IDbContextTransaction BeginTransaction()
+        public IDbContextTransaction BeginDbTransaction()
         {
             return db.Database.BeginTransaction();
         }
