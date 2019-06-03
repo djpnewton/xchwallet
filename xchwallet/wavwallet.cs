@@ -64,12 +64,12 @@ namespace xchwallet
             var address = new WalletAddr(_tag, nonce.ToString(), nonce, acct.Address);
             // add to address list
             db.WalletAddrs.Add(address);
+            db.SaveChanges();
             return address;
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain()
         {
-            var dbTransaction = db.Database.BeginTransaction();
             var blockHeight = (long)node.GetObject("blocks/height")["height"];
             foreach (var tag in GetTags())
                 foreach (var addr in tag.Addrs)
@@ -77,7 +77,7 @@ namespace xchwallet
                     UpdateTxs(addr, blockHeight);
                     db.SaveChanges();
                 }
-            return dbTransaction;
+            return;
         }
 
         void UpdateTxs(WalletAddr address, long blockHeight)
@@ -325,6 +325,7 @@ namespace xchwallet
                 }
                 // add to wallet data
                 wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
+                db.SaveChanges();
             }
             return res;
         }
@@ -365,6 +366,7 @@ namespace xchwallet
                     }
                     // add to wallet data
                     var wtx = AddOutgoingTx(tx.Item1, tx.Item2, null);
+                    db.SaveChanges();
                     ((List<WalletTx>)wtxs).Add(wtx);
                 }
             }

@@ -234,7 +234,6 @@ namespace test
                 if (tag_.Tag == tag)
                     return tag_;
             var tag__ = wallet.NewTag(tag);
-            wallet.Save();
             return tag__;
         }
 
@@ -250,7 +249,6 @@ namespace test
         static int RunNew(NewOptions opts)
         {
             var wallet = CreateWallet(opts.DbName, opts.Type, opts.ShowSql);
-            wallet.Save();
             return 0;
         }
 
@@ -342,9 +340,9 @@ namespace test
             }
             if (opts.Update)
             {
-                var dbTransaction = wallet.UpdateFromBlockchain();
-                wallet.Save();
-                dbTransaction.Commit();
+                var dbtx = wallet.BeginDbTransaction();
+                wallet.UpdateFromBlockchain();
+                dbtx.Commit();
             }
             PrintWallet(wallet, opts.MinimumConfirmations);
             return 0;
@@ -379,9 +377,10 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             EnsureTagExists(wallet, opts.Tag);
             Console.WriteLine(wallet.NewAddress(opts.Tag));
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -389,7 +388,7 @@ namespace test
         {
             if (wallet is BtcWallet)
             {
-                feeUnit = 20; // sats per byte
+                feeUnit = 5; // sats per byte
                 feeMax = 10000;
             }
             else if (wallet is EthWallet)
@@ -420,10 +419,11 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             EnsureTagExists(wallet, opts.Tag);
             var spend = wallet.RegisterPendingSpend(opts.Tag, opts.Tag, opts.To, opts.Amount);
             Console.WriteLine(spend);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -446,12 +446,13 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
+            var dbtx = wallet.BeginDbTransaction();
             WalletTx wtx;
             var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out wtx);
             Console.WriteLine(res);
             if (wtx != null)
                 Console.WriteLine(wtx.ChainTx.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -460,8 +461,9 @@ namespace test
              var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             wallet.PendingSpendCancel(opts.SpendCode);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -470,6 +472,7 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -479,7 +482,7 @@ namespace test
             Console.WriteLine(res);
             if (wtx != null)
                 Console.WriteLine(wtx.ChainTx.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -488,6 +491,7 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -500,7 +504,7 @@ namespace test
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -509,6 +513,7 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
@@ -519,7 +524,7 @@ namespace test
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -541,8 +546,9 @@ namespace test
             var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
             foreach (var tx in txs)
                 Console.WriteLine(tx);
+            var dbtx = wallet.BeginDbTransaction();
             wallet.AcknowledgeTransactions(opts.Tag, txs);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -551,8 +557,9 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             wallet.DeleteTransaction(opts.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 
@@ -561,10 +568,11 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
+            var dbtx = wallet.BeginDbTransaction();
             foreach (var tag in wallet.GetTags())
                 foreach (var tx in wallet.GetTransactions(tag.Tag))
                     wallet.DeleteTransaction(tx.ChainTx.TxId);
-            wallet.Save();
+            dbtx.Commit();
             return 0;
         }
 

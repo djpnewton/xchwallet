@@ -78,6 +78,7 @@ namespace xchwallet
             db.WalletAddrs.Add(address);
             // update last path index and return address
             db.LastPathIndex = pathIndex;
+            db.SaveChanges();
             return address;
         }
 
@@ -100,16 +101,15 @@ namespace xchwallet
             }
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain()
         {
-            var dbTransaction = db.Database.BeginTransaction();
             foreach (var tag in GetTags())
                 foreach (var addr in tag.Addrs)
                 {
                     UpdateTxs(addr);
                     db.SaveChanges();
                 }
-            return dbTransaction;
+            return;
         }
 
         void UpdateTxs(WalletAddr address)
@@ -303,6 +303,7 @@ namespace xchwallet
                     var txid = sendTxTask.Result;
                     // add to wallet data
                     wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
+                    db.SaveChanges();
                 }
                 catch (Exception ex)
                 {
@@ -354,6 +355,7 @@ namespace xchwallet
                     var wtx = AddOutgoingTx(tx.Item1, tx.Item2, null);
                     ((List<WalletTx>)wtxs).Add(wtx);
                 }
+                db.SaveChanges();
             }
             return res;
         }

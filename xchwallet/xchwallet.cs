@@ -83,44 +83,50 @@ namespace xchwallet
 
     public interface IWallet
     {
+        // read only functions
         string Type();
         bool IsMainnet();
         LedgerModel GetLedgerModel();
         IEnumerable<WalletTag> GetTags();
         bool HasTag(string tag);
-        WalletTag NewTag(string tag);
-        WalletAddr NewAddress(string tag);
-        WalletAddr NewOrUnusedAddress(string tag);
-        WalletAddr NewOrExistingAddress(string tag);
-        IDbContextTransaction UpdateFromBlockchain();
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletAddr> GetAddresses();
         IEnumerable<WalletTx> GetTransactions(string tag);
         IEnumerable<WalletTx> GetAddrTransactions(string address);
         IEnumerable<ChainTx> GetChainTxs();
+        BigInteger GetBalance(string tag, int minConfs = 0);
+        BigInteger GetBalance(IEnumerable<string> tags, int minConfs = 0);
+        BigInteger GetAddrBalance(string address, int minConfs = 0);
+        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null);
+        IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
+        IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
+        bool ValidateAddress(string address);
+        string AmountToString(BigInteger value);
+        BigInteger StringToAmount(string value);
+
+        // begin a db transaction, once you are finished with the state changing functions
+        // you can either commit or rollback all changes
+        IDbContextTransaction BeginDbTransaction();
+
+        // state changing functions, these will all make changes to the database,
+        // you should begin a db transaction if you want better control of when
+        // the data is actually commited to the db
+        WalletTag NewTag(string tag);
+        WalletAddr NewAddress(string tag);
+        WalletAddr NewOrUnusedAddress(string tag);
+        WalletAddr NewOrExistingAddress(string tag);
+        void UpdateFromBlockchain();
         void DeleteTransaction(string txid);
-        BigInteger GetBalance(string tag, int minConfs=0);
-        BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
-        BigInteger GetAddrBalance(string address, int minConfs=0);
         WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, string tagOnBehalfOf=null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out WalletTx tx);
         void PendingSpendCancel(string spendCode);
-        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out WalletTx wtx, WalletTxMeta meta=null);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wxs, int minConfs=0);
-        IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
-        IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void AcknowledgeTransactions(string tag, IEnumerable<WalletTx> txs);
         void SetNote(WalletTx wtx, string note);
         void SetTagOnBehalfOf(string tag, WalletTx wtx, string tagOnBehalfOf);
         void SetTagOnBehalfOf(string tag, WalletPendingSpend spend, string tagOnBehalfOf);
-        bool ValidateAddress(string address);
-        string AmountToString(BigInteger value);
-        BigInteger StringToAmount(string value);
-        IDbContextTransaction BeginDbTransaction();
-
-        void Save();
     }
 
     public abstract class BaseWallet : IWallet
@@ -128,7 +134,7 @@ namespace xchwallet
         public abstract bool IsMainnet();
         public abstract LedgerModel LedgerModel { get; }
         public abstract WalletAddr NewAddress(string tag);
-        public abstract IDbContextTransaction UpdateFromBlockchain();
+        public abstract void UpdateFromBlockchain();
         public abstract IEnumerable<WalletTx> GetTransactions(string tag);
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag, int minConfs=0);
@@ -192,13 +198,11 @@ namespace xchwallet
             this.logger = logger;
             this.db = db;
             this.mainnet = mainnet;
+            // check settings
             CheckType();
             CheckSeed();
             CheckMainnet();
-        }
-
-        public void Save()
-        {
+            // set settings
             db.CfgSet(Util.TYPE_KEY, Type());
             db.CfgSet(Util.SEED_KEY, seedHex);
             db.CfgSetBool(Util.MAINNET_KEY, IsMainnet());
@@ -224,6 +228,7 @@ namespace xchwallet
         {
             var tag_ = new WalletTag{ Tag = tag };
             db.WalletTags.Add(tag_);
+            db.SaveChanges();
             return tag_;
         }
 
@@ -263,6 +268,7 @@ namespace xchwallet
         public void DeleteTransaction(string txid)
         {
             db.TxDelete(txid);
+            db.SaveChanges();
         }
 
         public BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0)
@@ -294,6 +300,7 @@ namespace xchwallet
             db.WalletPendingSpends.Add(spend);
             spend.Meta = new WalletTxMeta() {TagOnBehalfOf=tagOnBehalfOf};
             db.WalletTxMetas.Add(spend.Meta);
+            db.SaveChanges();
             return spend;
         }
 
@@ -315,6 +322,7 @@ namespace xchwallet
                 spend.Error = err;
             }
             db.WalletPendingSpends.Update(spend);
+            db.SaveChanges();
             return err;
         }
 
@@ -325,6 +333,7 @@ namespace xchwallet
             Util.WalletAssert(spend.State == PendingSpendState.Pending || spend.State == PendingSpendState.Error, "PendingSpend has wrong state to cancel");
             spend.State = PendingSpendState.Cancelled;
             db.WalletPendingSpends.Update(spend);
+            db.SaveChanges();
         }
 
         public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null)
@@ -369,24 +378,28 @@ namespace xchwallet
             foreach (var tx in txs)
                 tx.Acknowledged = true;
             db.WalletTxs.UpdateRange(txs);
+            db.SaveChanges();
         }
 
         public void SetNote(WalletTx wtx, string note)
         {
             wtx.Meta.Note = note;
             db.WalletTxs.Update(wtx);
+            db.SaveChanges();
         }
 
         public void SetTagOnBehalfOf(string tag, WalletTx wtx, string tagOnBehalfOf)
         {
             wtx.Meta.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletTxs.Update(wtx);
+            db.SaveChanges();
         }
 
         public void SetTagOnBehalfOf(string tag, WalletPendingSpend spend, string tagOnBehalfOf)
         {
             spend.Meta.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletPendingSpends.Update(spend);
+            db.SaveChanges();
         }
 
         public IDbContextTransaction BeginDbTransaction()

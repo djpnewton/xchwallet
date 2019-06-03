@@ -73,6 +73,7 @@ namespace xchwallet
             var address = new WalletAddr(_tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             // add to address list
             db.WalletAddrs.Add(address);
+            db.SaveChanges();
             return address;
         }
 
@@ -133,16 +134,15 @@ namespace xchwallet
             }
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain()
         {
-            var dbTransaction = db.Database.BeginTransaction();
-            UpdateTxs(dbTransaction);
+            UpdateTxs();
             UpdateTxConfirmations(pubkey);
             db.SaveChanges();
-            return dbTransaction;
+            return;
         }
 
-        private void UpdateTxs(IDbContextTransaction dbTransaction)
+        private void UpdateTxs()
         {
             var utxos = client.GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)
@@ -223,6 +223,7 @@ namespace xchwallet
             // add to address list
             address = new WalletAddr(tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             db.WalletAddrs.Add(address);
+            db.SaveChanges();
             return addr;
         }
 
@@ -335,6 +336,7 @@ namespace xchwallet
             {
                 // log outgoing transaction
                 wtx = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to, amount, fee.Satoshi, meta);
+                db.SaveChanges();
                 return WalletError.Success;
             }
             else
@@ -417,6 +419,7 @@ namespace xchwallet
                 // log outgoing transaction
                 var wtx = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to.Address, amount, fee.Satoshi, null);
                 ((List<WalletTx>)wtxs).Add(wtx);
+                db.SaveChanges();
                 return WalletError.Success;
             }
             else
