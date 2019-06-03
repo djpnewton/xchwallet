@@ -92,7 +92,7 @@ namespace xchwallet
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
         WalletAddr NewOrExistingAddress(string tag);
-        IDbContextTransaction UpdateFromBlockchain();
+        void UpdateFromBlockchain(IDbContextTransaction dbtx);
         IEnumerable<WalletAddr> GetAddresses(string tag);
         IEnumerable<WalletAddr> GetAddresses();
         IEnumerable<WalletTx> GetTransactions(string tag);
@@ -128,7 +128,7 @@ namespace xchwallet
         public abstract bool IsMainnet();
         public abstract LedgerModel LedgerModel { get; }
         public abstract WalletAddr NewAddress(string tag);
-        public abstract IDbContextTransaction UpdateFromBlockchain();
+        public abstract void UpdateFromBlockchain(IDbContextTransaction dbtx);
         public abstract IEnumerable<WalletTx> GetTransactions(string tag);
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag, int minConfs=0);

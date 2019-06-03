@@ -133,16 +133,16 @@ namespace xchwallet
             }
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain(IDbContextTransaction dbtx)
         {
-            var dbTransaction = db.Database.BeginTransaction();
-            UpdateTxs(dbTransaction);
+            System.Diagnostics.Debug.Assert(dbtx != null);
+            UpdateTxs();
             UpdateTxConfirmations(pubkey);
             db.SaveChanges();
-            return dbTransaction;
+            return;
         }
 
-        private void UpdateTxs(IDbContextTransaction dbTransaction)
+        private void UpdateTxs()
         {
             var utxos = client.GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)

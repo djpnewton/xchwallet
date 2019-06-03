@@ -342,9 +342,10 @@ namespace test
             }
             if (opts.Update)
             {
-                var dbTransaction = wallet.UpdateFromBlockchain();
+                var dbtx = wallet.BeginDbTransaction();
+                wallet.UpdateFromBlockchain(dbtx);
                 wallet.Save();
-                dbTransaction.Commit();
+                dbtx.Commit();
             }
             PrintWallet(wallet, opts.MinimumConfirmations);
             return 0;

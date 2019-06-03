@@ -67,9 +67,9 @@ namespace xchwallet
             return address;
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain(IDbContextTransaction dbtx)
         {
-            var dbTransaction = db.Database.BeginTransaction();
+            System.Diagnostics.Debug.Assert(dbtx != null);
             var blockHeight = (long)node.GetObject("blocks/height")["height"];
             foreach (var tag in GetTags())
                 foreach (var addr in tag.Addrs)
@@ -77,7 +77,7 @@ namespace xchwallet
                     UpdateTxs(addr, blockHeight);
                     db.SaveChanges();
                 }
-            return dbTransaction;
+            return;
         }
 
         void UpdateTxs(WalletAddr address, long blockHeight)

@@ -100,16 +100,16 @@ namespace xchwallet
             }
         }
 
-        public override IDbContextTransaction UpdateFromBlockchain()
+        public override void UpdateFromBlockchain(IDbContextTransaction dbtx)
         {
-            var dbTransaction = db.Database.BeginTransaction();
+            System.Diagnostics.Debug.Assert(dbtx != null);
             foreach (var tag in GetTags())
                 foreach (var addr in tag.Addrs)
                 {
                     UpdateTxs(addr);
                     db.SaveChanges();
                 }
-            return dbTransaction;
+            return;
         }
 
         void UpdateTxs(WalletAddr address)
