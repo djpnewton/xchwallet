@@ -144,7 +144,7 @@ namespace xchwallet
                 var up = db.BalanceUpdateGet(scantx.txid, true, 0);
                 if (up == null)
                 {
-                    up = new BalanceUpdate(scantx.txid, true, 0, BigInteger.Parse(scantx.value));
+                    up = new BalanceUpdate(scantx.txid, scantx.from_, scantx.to, true, 0, BigInteger.Parse(scantx.value));
                     up.ChainTx = ctx;
                     up.WalletAddr = address;
                     db.BalanceUpdates.Add(up);
@@ -267,7 +267,7 @@ namespace xchwallet
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var ctx = new ChainTx(tx.Hash.ToHex(true), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
-            var up = new BalanceUpdate(tx.Hash.ToHex(true), false, 0, amount + fee);
+            var up = new BalanceUpdate(tx.Hash.ToHex(true), from, tx.ReceiveAddress.ToHex(true), false, 0, amount + fee);
             up.ChainTx = ctx;
             up.WalletAddr = address;
             db.BalanceUpdates.Add(up);

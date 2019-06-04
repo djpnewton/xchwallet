@@ -189,9 +189,18 @@ namespace test
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
                     {
-                        var in_ = tx.ChainTx.AmountIncomming();
-                        var out_ = tx.ChainTx.AmountOutgoing();
-                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {in_-out_} (in {in_}, out {out_}), {tx.ChainTx.Fee}");
+                        if (tx.Direction == WalletDirection.Incomming)
+                        {
+                            var in_ = tx.AmountIncomming();
+                            var from = tx.ChainTx.From();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, in {in_} (from {from}) {tx.ChainTx.Fee}");
+                        }
+                        else
+                        {
+                            var out_ = tx.AmountOutgoing();
+                            var to = tx.ChainTx.To();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, out {out_} (to {to}) {tx.ChainTx.Fee}");
+                        }
                     }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");

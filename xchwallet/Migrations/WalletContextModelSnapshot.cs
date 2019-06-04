@@ -28,9 +28,13 @@ namespace xchwallet.Migrations
 
                     b.Property<int>("ChainTxId");
 
+                    b.Property<string>("From");
+
                     b.Property<bool>("Input");
 
                     b.Property<uint>("N");
+
+                    b.Property<string>("To");
 
                     b.Property<string>("TxId");
 

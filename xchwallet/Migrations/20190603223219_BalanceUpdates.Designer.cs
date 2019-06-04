@@ -9,7 +9,7 @@ using xchwallet;
 namespace xchwallet.Migrations
 {
     [DbContext(typeof(WalletContext))]
-    [Migration("20190601194831_BalanceUpdates")]
+    [Migration("20190603223219_BalanceUpdates")]
     partial class BalanceUpdates
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -30,9 +30,13 @@ namespace xchwallet.Migrations
 
                     b.Property<int>("ChainTxId");
 
+                    b.Property<string>("From");
+
                     b.Property<bool>("Input");
 
                     b.Property<uint>("N");
+
+                    b.Property<string>("To");
 
                     b.Property<string>("TxId");
 

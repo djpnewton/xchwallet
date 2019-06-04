@@ -349,6 +349,8 @@ namespace xchwallet
         public virtual ChainTx ChainTx { get; set; }
         public virtual WalletAddr WalletAddr { get; set; }
         public string TxId { get; set; }
+        public string From { get; set; }
+        public string To { get; set; }
         public bool Input { get; set; }
         public uint N { get; set; }
         [Column(TypeName = "varchar(255)")]
@@ -357,14 +359,18 @@ namespace xchwallet
         public BalanceUpdate()
         {
             this.TxId = null;
+            this.From = null;
+            this.To = null;
             this.Input = false;
             this.N = 0;
             this.Amount = 0;
         }
 
-        public BalanceUpdate(string txid, bool input, uint n, BigInteger amount)
+        public BalanceUpdate(string txid, string from, string to, bool input, uint n, BigInteger amount)
         {
             this.TxId = txid;
+            this.From = from;
+            this.To = to;
             this.Input = input;
             this.N = n;
             this.Amount = amount;
@@ -407,18 +413,40 @@ namespace xchwallet
             this.Confirmations = confirmations;
         }
 
-        public BigInteger AmountIncomming()
+        public string From()
+        {
+            var incomming = BalanceUpdates.Where(bu => bu.Input == true);
+            if (incomming.Any())
+                return string.Join(",", incomming.Select(i => i.From).Distinct());
+            return null;
+        }
+
+        public string To()
+        {
+            var incomming = BalanceUpdates.Where(bu => bu.Input == false);
+            if (incomming.Any())
+                return string.Join(",", incomming.Select(i => i.To).Distinct());
+            return null;
+        }
+
+        public BigInteger AmountIncomming(string addr=null)
         {
             BigInteger amount = 0;
-            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == true))
+            var updates = BalanceUpdates;
+            if (addr != null)
+                updates = BalanceUpdates.Where(bu => bu.WalletAddr.Address == addr);
+            foreach (var bu in updates.Where(bu => bu.Input == true))
                 amount += bu.Amount;
             return amount;
         }
 
-        public BigInteger AmountOutgoing()
+        public BigInteger AmountOutgoing(string addr = null)
         {
             BigInteger amount = 0;
-            foreach (var bu in BalanceUpdates.Where(bu => bu.Input == false))
+            var updates = BalanceUpdates;
+            if (addr != null)
+                updates = BalanceUpdates.Where(bu => bu.WalletAddr.Address == addr);
+            foreach (var bu in updates.Where(bu => bu.Input == false))
                 amount += bu.Amount;
             return amount;
         }
@@ -553,7 +581,23 @@ namespace xchwallet
 
         public int WalletTxMetaId { get; set; }
         public virtual WalletTxMeta Meta { get; set; }
-        
+
+        public BigInteger AmountIncomming()
+        {
+            BigInteger amount = 0;
+            foreach (var bu in ChainTx.BalanceUpdates.Where(bu => bu.WalletAddrId == WalletAddrId && bu.Input == true))
+                amount += bu.Amount;
+            return amount;
+        }
+
+        public BigInteger AmountOutgoing()
+        {
+            BigInteger amount = 0;
+            foreach (var bu in ChainTx.BalanceUpdates.Where(bu => bu.WalletAddrId == WalletAddrId && bu.Input == false))
+                    amount += bu.Amount;
+            return amount;
+        }
+
         public override string ToString()
         {
             return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Meta?.Id} {Meta?.Note} {Meta?.TagOnBehalfOf}>";

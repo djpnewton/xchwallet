@@ -28,6 +28,8 @@ namespace xchwallet.Migrations
                     ChainTxId = table.Column<int>(nullable: false),
                     WalletAddrId = table.Column<int>(nullable: false),
                     TxId = table.Column<string>(nullable: true),
+                    From = table.Column<string>(nullable: true),
+                    To = table.Column<string>(nullable: true),
                     Input = table.Column<bool>(nullable: false),
                     N = table.Column<uint>(nullable: false),
                     Amount = table.Column<string>(type: "varchar(255)", nullable: false)

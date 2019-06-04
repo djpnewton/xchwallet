@@ -118,7 +118,7 @@ namespace xchwallet
             var up = db.BalanceUpdateGet(id, true, utxo.Outpoint.N);
             if (up == null)
             {
-                up = new BalanceUpdate(id, true, utxo.Outpoint.N, utxo.Value.Satoshi);
+                up = new BalanceUpdate(id, null, address.Address, true, utxo.Outpoint.N, utxo.Value.Satoshi);
                 up.ChainTx = ctx;
                 up.WalletAddr = address;
                 db.BalanceUpdates.Add(up);
@@ -235,7 +235,7 @@ namespace xchwallet
             uint n = 0;
             foreach ((var addr, var coin, var _) in spent)
             {
-                var up = new BalanceUpdate(txid, false, n, coin.Amount.Satoshi);
+                var up = new BalanceUpdate(txid, addr.Address, to, false, n, coin.Amount.Satoshi);
                 up.ChainTx = ctx;
                 up.WalletAddr = addr;
                 db.BalanceUpdates.Add(up);
@@ -364,17 +364,22 @@ namespace xchwallet
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
+                if (minConfs <= 0)
+                    foreach (var utxo in utxos.Unconfirmed.UTXOs)
+                    {
+                        var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                        var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                        if (addr != null)
+                            candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
+                    }
                 foreach (var utxo in utxos.Confirmed.UTXOs)
                 {
+                    if (minConfs > 0 && utxo.Confirmations < minConfs)
+                        continue;
                     var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
-                    foreach (var addr in addrs)
-                        if (addrStr == addr.Address)
-                        {
-                            if (minConfs > 0 && utxo.Confirmations < minConfs)
-                                continue;
-                            candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-                            break;
-                        }
+                    var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                    if (addr != null)
+                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
                 }
             }
             // add all inputs so we can satisfy our output
