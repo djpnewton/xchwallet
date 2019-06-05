@@ -17,38 +17,6 @@ namespace xchwallet.Migrations
                 .HasAnnotation("ProductVersion", "2.2.1-servicing-10028")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
-            modelBuilder.Entity("xchwallet.BalanceUpdate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Amount")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<int>("ChainTxId");
-
-                    b.Property<string>("From");
-
-                    b.Property<bool>("Input");
-
-                    b.Property<uint>("N");
-
-                    b.Property<string>("To");
-
-                    b.Property<string>("TxId");
-
-                    b.Property<int>("WalletAddrId");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChainTxId");
-
-                    b.HasIndex("WalletAddrId");
-
-                    b.ToTable("BalanceUpdates");
-                });
-
             modelBuilder.Entity("xchwallet.ChainAttachment", b =>
                 {
                     b.Property<int>("Id")
@@ -89,6 +57,62 @@ namespace xchwallet.Migrations
                         .IsUnique();
 
                     b.ToTable("ChainTxs");
+                });
+
+            modelBuilder.Entity("xchwallet.TxInput", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<string>("Addr");
+
+                    b.Property<string>("Amount")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("ChainTxId");
+
+                    b.Property<uint>("N");
+
+                    b.Property<string>("TxId");
+
+                    b.Property<int?>("WalletAddrId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChainTxId");
+
+                    b.HasIndex("WalletAddrId");
+
+                    b.ToTable("TxInputs");
+                });
+
+            modelBuilder.Entity("xchwallet.TxOutput", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd();
+
+                    b.Property<string>("Addr");
+
+                    b.Property<string>("Amount")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("ChainTxId");
+
+                    b.Property<uint>("N");
+
+                    b.Property<string>("TxId");
+
+                    b.Property<int?>("WalletAddrId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChainTxId");
+
+                    b.HasIndex("WalletAddrId");
+
+                    b.ToTable("TxOutputs");
                 });
 
             modelBuilder.Entity("xchwallet.WalletAddr", b =>
@@ -156,9 +180,9 @@ namespace xchwallet.Migrations
 
                     b.Property<string>("To");
 
-                    b.Property<int?>("WalletTxId");
+                    b.Property<string>("TxIds");
 
-                    b.Property<int>("WalletTxMetaId");
+                    b.Property<int?>("WalletTxMetaId");
 
                     b.HasKey("Id");
 
@@ -168,8 +192,6 @@ namespace xchwallet.Migrations
                     b.HasIndex("TagChangeId");
 
                     b.HasIndex("TagId");
-
-                    b.HasIndex("WalletTxId");
 
                     b.HasIndex("WalletTxMetaId");
 
@@ -204,7 +226,7 @@ namespace xchwallet.Migrations
 
                     b.Property<int>("WalletAddrId");
 
-                    b.Property<int>("WalletTxMetaId");
+                    b.Property<int?>("WalletTxMetaId");
 
                     b.HasKey("Id");
 
@@ -231,25 +253,36 @@ namespace xchwallet.Migrations
                     b.ToTable("WalletTxMetas");
                 });
 
-            modelBuilder.Entity("xchwallet.BalanceUpdate", b =>
-                {
-                    b.HasOne("xchwallet.ChainTx", "ChainTx")
-                        .WithMany("BalanceUpdates")
-                        .HasForeignKey("ChainTxId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("xchwallet.WalletAddr", "WalletAddr")
-                        .WithMany("BalanceUpdates")
-                        .HasForeignKey("WalletAddrId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
             modelBuilder.Entity("xchwallet.ChainAttachment", b =>
                 {
                     b.HasOne("xchwallet.ChainTx", "Tx")
                         .WithOne("Attachment")
                         .HasForeignKey("xchwallet.ChainAttachment", "ChainTxId")
                         .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("xchwallet.TxInput", b =>
+                {
+                    b.HasOne("xchwallet.ChainTx", "ChainTx")
+                        .WithMany("TxInputs")
+                        .HasForeignKey("ChainTxId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("xchwallet.WalletAddr", "WalletAddr")
+                        .WithMany("TxInputs")
+                        .HasForeignKey("WalletAddrId");
+                });
+
+            modelBuilder.Entity("xchwallet.TxOutput", b =>
+                {
+                    b.HasOne("xchwallet.ChainTx", "ChainTx")
+                        .WithMany("TxOutputs")
+                        .HasForeignKey("ChainTxId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("xchwallet.WalletAddr", "WalletAddr")
+                        .WithMany("TxOutputs")
+                        .HasForeignKey("WalletAddrId");
                 });
 
             modelBuilder.Entity("xchwallet.WalletAddr", b =>
@@ -272,14 +305,9 @@ namespace xchwallet.Migrations
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.HasOne("xchwallet.WalletTx", "Tx")
-                        .WithMany()
-                        .HasForeignKey("WalletTxId");
-
                     b.HasOne("xchwallet.WalletTxMeta", "Meta")
                         .WithMany()
-                        .HasForeignKey("WalletTxMetaId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("WalletTxMetaId");
                 });
 
             modelBuilder.Entity("xchwallet.WalletTx", b =>
@@ -296,8 +324,7 @@ namespace xchwallet.Migrations
 
                     b.HasOne("xchwallet.WalletTxMeta", "Meta")
                         .WithMany()
-                        .HasForeignKey("WalletTxMetaId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("WalletTxMetaId");
                 });
 #pragma warning restore 612, 618
         }

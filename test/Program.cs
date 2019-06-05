@@ -189,17 +189,17 @@ namespace test
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
                     {
-                        if (tx.Direction == WalletDirection.Incomming)
+                        if (tx.Direction == WalletDirection.Outgoing)
                         {
-                            var in_ = tx.AmountIncomming();
-                            var from = tx.ChainTx.From();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, in {in_} (from {from}) {tx.ChainTx.Fee}");
+                            var inputs = tx.AmountInputs();
+                            var from = tx.From();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (from {from}) {tx.ChainTx.Fee}");
                         }
                         else
                         {
-                            var out_ = tx.AmountOutgoing();
-                            var to = tx.ChainTx.To();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, out {out_} (to {to}) {tx.ChainTx.Fee}");
+                            var outputs = tx.AmountOutputs();
+                            var to = tx.To();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (to {to}) {tx.ChainTx.Fee}");
                         }
                     }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
@@ -238,13 +238,12 @@ namespace test
 
         static WalletTag EnsureTagExists(IWallet wallet, string tag)
         {
-            var tags = wallet.GetTags();
-            foreach (var tag_ in tags)
-                if (tag_.Tag == tag)
-                    return tag_;
-            var tag__ = wallet.NewTag(tag);
+            var tag_ = wallet.GetTags().SingleOrDefault(t => t.Tag == tag);
+            if (tag_ != null)
+                return tag_;
+            tag_ = wallet.NewTag(tag);
             wallet.Save();
-            return tag__;
+            return tag_;
         }
 
         static IWallet OpenWallet(CommonOptions opts)
@@ -456,10 +455,9 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            WalletTx wtx;
-            var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out wtx);
+            var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs);
             Console.WriteLine(res);
-            if (wtx != null)
+            foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
@@ -483,11 +481,10 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            WalletTx wtx;
             EnsureTagExists(wallet, opts.Tag);
-            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out wtx);
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs);
             Console.WriteLine(res);
-            if (wtx != null)
+            foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
@@ -504,9 +501,8 @@ namespace test
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            IEnumerable<WalletTx> wtxs;
             EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs, opts.MinimumConfirmations);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
