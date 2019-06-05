@@ -17,7 +17,7 @@
       notify:
         - restart ufw
 
-    - name: firewall for ssh
+    - name: firewall rules
       ufw:
         if: "{{item.if}}"
         direction: "{{item.direction}}"
@@ -26,6 +26,12 @@
         proto: "{{item.proto}}"
       with_items:
         - { if: "{{if_external}}", rule: 'limit', direction: 'in', port: '{{ ssh_port | default("22") }}', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18332', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18333', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '5001', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '24444', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '6863', proto: 'tcp' }
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '6869', proto: 'tcp' }
       notify:
         - restart ufw
 

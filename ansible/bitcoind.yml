@@ -9,17 +9,6 @@
     version: "{{version_without_build}}.1"
     bitcoinfile: bitcoin-{{version}}-x86_64-linux-gnu.tar.gz
   tasks:
-    - name: firewall for bitcoind
-      ufw:
-        if: "{{item.if}}"
-        direction: "{{item.direction}}"
-        rule: "{{item.rule}}"
-        port: "{{item.port}}"
-        proto: "{{item.proto}}"
-      with_items:
-              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18332', proto: 'tcp' }
-              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18333', proto: 'tcp' }
-
     - name: bitcoind group
       group: 
         name: bitcoin

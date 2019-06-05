@@ -9,19 +9,6 @@
     waves_file: "waves-all-{{ waves_version }}.jar"
     waves_conf_file: "{{ 'waves_testnet.conf' if testnet else 'waves_mainnet.conf' }}"
   tasks:
-    - name: firewall for waves
-      ufw:
-        if: "{{item.if}}"
-        direction: "{{item.direction}}"
-        rule: "{{item.rule}}"
-        port: "{{item.port}}"
-        proto: "{{item.proto}}"
-      with_items:
-              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '6863', proto: 'tcp' }
-              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '6869', proto: 'tcp' }
-      notify:
-        - restart ufw
-
     - name: ansible group
       group: 
         name: waves
