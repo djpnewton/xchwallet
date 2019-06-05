@@ -5,6 +5,18 @@
   become_user: root
 
   tasks:
+    - name: firewall for nbxplorer
+      ufw:
+        if: "{{item.if}}"
+        direction: "{{item.direction}}"
+        rule: "{{item.rule}}"
+        port: "{{item.port}}"
+        proto: "{{item.proto}}"
+      with_items:
+        - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '24444', proto: 'tcp' }
+      notify:
+        - restart ufw
+
     - name: ansible group
       group: 
         name: xchwallet
@@ -54,3 +66,9 @@
         name: nbxplorer
         state: started
         enabled: yes
+
+  handlers:
+
+    - name: restart ufw
+      service: name=ufw state=restarted
+

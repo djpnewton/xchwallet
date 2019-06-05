@@ -5,6 +5,19 @@
   become_user: root
 
   tasks:
+    - name: firewall for gethtxscan
+      ufw:
+        if: "{{item.if}}"
+        direction: "{{item.direction}}"
+        rule: "{{item.rule}}"
+        port: "{{item.port}}"
+        proto: "{{item.proto}}"
+      with_items:
+              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '5001', proto: 'tcp' }
+      notify:
+        - restart ufw
+
+
     - name: ansible group
       group: 
         name: xchwallet
@@ -32,7 +45,7 @@
         dest: /etc/systemd/system/gethtxscan.service
 
     - name: install python requiremnents
-      shell: pip3 install --system -r /opt/gethtxscan/requirements.txt
+      shell: pip3 install -r /opt/gethtxscan/requirements.txt
 
     - name: stop gethtxscan service
       service: 
@@ -40,8 +53,14 @@
         state: stopped
         enabled: no
 
-    - name: start gethtxscan service
-      service: 
-        name: gethtxscan
-        state: started
-        enabled: yes
+#    - name: start gethtxscan service
+#      service: 
+#        name: gethtxscan
+#        state: started
+#        enabled: yes
+
+  handlers:
+
+    - name: restart ufw
+      service: name=ufw state=restarted
+

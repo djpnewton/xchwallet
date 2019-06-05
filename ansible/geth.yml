@@ -9,6 +9,19 @@
     commit: 24d727b6
     gethrelease: geth-linux-amd64-{{version}}-{{commit}}
   tasks:
+    - name: firewall for geth 
+      ufw:
+        if: "{{item.if}}"
+        direction: "{{item.direction}}"
+        rule: "{{item.rule}}"
+        port: "{{item.port}}"
+        proto: "{{item.proto}}"
+      with_items:
+              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '8545', proto: 'tcp' }
+              - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '30303', proto: 'tcp' }
+      notify:
+        - restart ufw
+
     - name: ansible group
       group: 
         name: geth
@@ -62,8 +75,14 @@
         state: directory
         recurse: yes
 
-    - name: start geth service
-      service: 
-        name: geth 
-        state: started
-        enabled: yes
+#    - name: start geth service
+#      service: 
+#        name: geth 
+#        state: started
+#        enabled: yes
+
+  handlers:
+
+    - name: restart ufw
+      service: name=ufw state=restarted
+
