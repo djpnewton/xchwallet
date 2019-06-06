@@ -38,6 +38,7 @@
       when: vagrant == "true"
       ignore_errors: yes
 
+- import_playbook: firewall.yml
 - import_playbook: geth.yml
 - import_playbook: bitcoind.yml
 - import_playbook: gethtxscan.yml
@@ -45,3 +46,4 @@
 - import_playbook: nbxplorer.yml
 - import_playbook: java.yml
 - import_playbook: waves.yml
+
