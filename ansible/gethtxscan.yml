@@ -32,7 +32,7 @@
         dest: /etc/systemd/system/gethtxscan.service
 
     - name: install python requiremnents
-      shell: pip3 install -r /opt/gethtxscan/requirements.txt
+      shell: pip3 install --system -r /opt/gethtxscan/requirements.txt
 
     - name: stop gethtxscan service
       service: 
