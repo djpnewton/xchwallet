@@ -54,9 +54,3 @@
         name: nbxplorer
         state: started
         enabled: yes
-
-  handlers:
-
-    - name: restart ufw
-      service: name=ufw state=restarted
-

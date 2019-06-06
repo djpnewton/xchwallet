@@ -62,14 +62,8 @@
         state: directory
         recurse: yes
 
-#    - name: start geth service
-#      service: 
-#        name: geth 
-#        state: started
-#        enabled: yes
-
-  handlers:
-
-    - name: restart ufw
-      service: name=ufw state=restarted
-
+    - name: start geth service
+      service: 
+        name: geth 
+        state: started
+        enabled: yes
