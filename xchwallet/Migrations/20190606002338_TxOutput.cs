@@ -19,12 +19,27 @@ namespace xchwallet.Migrations
                 name: "FK_WalletTxs_WalletTxMetas_WalletTxMetaId",
                 table: "WalletTxs");
 
+            migrationBuilder.DropTable(
+                name: "WalletTxMetas");
+
             migrationBuilder.DropIndex(
-                name: "IX_WalletPendingSpends_WalletTxId",
+                name: "IX_WalletTxs_WalletTxMetaId",
+                table: "WalletTxs");
+
+            migrationBuilder.DropIndex(
+                name: "IX_WalletPendingSpends_WalletTxMetaId",
                 table: "WalletPendingSpends");
 
             migrationBuilder.DropColumn(
-                name: "WalletTxId",
+                name: "Acknowledged",
+                table: "WalletTxs");
+
+            migrationBuilder.DropColumn(
+                name: "WalletTxMetaId",
+                table: "WalletTxs");
+
+            migrationBuilder.DropColumn(
+                name: "WalletTxMetaId",
                 table: "WalletPendingSpends");
 
             migrationBuilder.DropColumn(
@@ -39,17 +54,26 @@ namespace xchwallet.Migrations
                 name: "To",
                 table: "ChainTxs");
 
-            migrationBuilder.AlterColumn<int>(
-                name: "WalletTxMetaId",
-                table: "WalletTxs",
-                nullable: true,
-                oldClrType: typeof(int));
-
-            migrationBuilder.AlterColumn<int>(
-                name: "WalletTxMetaId",
+            migrationBuilder.RenameColumn(
+                name: "WalletTxId",
                 table: "WalletPendingSpends",
-                nullable: true,
-                oldClrType: typeof(int));
+                newName: "TagOnBehalfOfId");
+
+            migrationBuilder.RenameIndex(
+                name: "IX_WalletPendingSpends_WalletTxId",
+                table: "WalletPendingSpends",
+                newName: "IX_WalletPendingSpends_TagOnBehalfOfId");
+
+            migrationBuilder.AddColumn<int>(
+                name: "State",
+                table: "WalletTxs",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.AddColumn<int>(
+                name: "TagOnBehalfOfId",
+                table: "WalletTxs",
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "TxIds",
@@ -117,6 +141,11 @@ namespace xchwallet.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_WalletTxs_TagOnBehalfOfId",
+                table: "WalletTxs",
+                column: "TagOnBehalfOfId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_TxInputs_ChainTxId",
                 table: "TxInputs",
                 column: "ChainTxId");
@@ -137,18 +166,18 @@ namespace xchwallet.Migrations
                 column: "WalletAddrId");
 
             migrationBuilder.AddForeignKey(
-                name: "FK_WalletPendingSpends_WalletTxMetas_WalletTxMetaId",
+                name: "FK_WalletPendingSpends_WalletTags_TagOnBehalfOfId",
                 table: "WalletPendingSpends",
-                column: "WalletTxMetaId",
-                principalTable: "WalletTxMetas",
+                column: "TagOnBehalfOfId",
+                principalTable: "WalletTags",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
 
             migrationBuilder.AddForeignKey(
-                name: "FK_WalletTxs_WalletTxMetas_WalletTxMetaId",
+                name: "FK_WalletTxs_WalletTags_TagOnBehalfOfId",
                 table: "WalletTxs",
-                column: "WalletTxMetaId",
-                principalTable: "WalletTxMetas",
+                column: "TagOnBehalfOfId",
+                principalTable: "WalletTags",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
         }
@@ -156,11 +185,11 @@ namespace xchwallet.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
-                name: "FK_WalletPendingSpends_WalletTxMetas_WalletTxMetaId",
+                name: "FK_WalletPendingSpends_WalletTags_TagOnBehalfOfId",
                 table: "WalletPendingSpends");
 
             migrationBuilder.DropForeignKey(
-                name: "FK_WalletTxs_WalletTxMetas_WalletTxMetaId",
+                name: "FK_WalletTxs_WalletTags_TagOnBehalfOfId",
                 table: "WalletTxs");
 
             migrationBuilder.DropTable(
@@ -169,28 +198,49 @@ namespace xchwallet.Migrations
             migrationBuilder.DropTable(
                 name: "TxOutputs");
 
+            migrationBuilder.DropIndex(
+                name: "IX_WalletTxs_TagOnBehalfOfId",
+                table: "WalletTxs");
+
+            migrationBuilder.DropColumn(
+                name: "State",
+                table: "WalletTxs");
+
+            migrationBuilder.DropColumn(
+                name: "TagOnBehalfOfId",
+                table: "WalletTxs");
+
             migrationBuilder.DropColumn(
                 name: "TxIds",
                 table: "WalletPendingSpends");
 
-            migrationBuilder.AlterColumn<int>(
+            migrationBuilder.RenameColumn(
+                name: "TagOnBehalfOfId",
+                table: "WalletPendingSpends",
+                newName: "WalletTxId");
+
+            migrationBuilder.RenameIndex(
+                name: "IX_WalletPendingSpends_TagOnBehalfOfId",
+                table: "WalletPendingSpends",
+                newName: "IX_WalletPendingSpends_WalletTxId");
+
+            migrationBuilder.AddColumn<bool>(
+                name: "Acknowledged",
+                table: "WalletTxs",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<int>(
                 name: "WalletTxMetaId",
                 table: "WalletTxs",
                 nullable: false,
-                oldClrType: typeof(int),
-                oldNullable: true);
+                defaultValue: 0);
 
-            migrationBuilder.AlterColumn<int>(
+            migrationBuilder.AddColumn<int>(
                 name: "WalletTxMetaId",
                 table: "WalletPendingSpends",
                 nullable: false,
-                oldClrType: typeof(int),
-                oldNullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "WalletTxId",
-                table: "WalletPendingSpends",
-                nullable: true);
+                defaultValue: 0);
 
             migrationBuilder.AddColumn<string>(
                 name: "Amount",
@@ -209,10 +259,29 @@ namespace xchwallet.Migrations
                 table: "ChainTxs",
                 nullable: true);
 
+            migrationBuilder.CreateTable(
+                name: "WalletTxMetas",
+                columns: table => new
+                {
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                    Note = table.Column<string>(nullable: true),
+                    TagOnBehalfOf = table.Column<string>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_WalletTxMetas", x => x.Id);
+                });
+
             migrationBuilder.CreateIndex(
-                name: "IX_WalletPendingSpends_WalletTxId",
+                name: "IX_WalletTxs_WalletTxMetaId",
+                table: "WalletTxs",
+                column: "WalletTxMetaId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WalletPendingSpends_WalletTxMetaId",
                 table: "WalletPendingSpends",
-                column: "WalletTxId");
+                column: "WalletTxMetaId");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_WalletPendingSpends_WalletTxs_WalletTxId",

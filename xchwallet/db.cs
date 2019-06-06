@@ -187,7 +187,6 @@ namespace xchwallet
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
         public DbSet<WalletPendingSpend> WalletPendingSpends { get; set; }
-        public DbSet<WalletTxMeta> WalletTxMetas { get; set; }
 
         public int LastPathIndex
         {
@@ -294,7 +293,7 @@ namespace xchwallet
         {
             var addr = AddrGet(address);
             if (addr != null)
-                return WalletTxs.Where(t => t.WalletAddrId == addr.Id && t.Acknowledged == false);
+                return WalletTxs.Where(t => t.WalletAddrId == addr.Id && t.State != WalletTxState.Ack);
             return new List<WalletTx>();
         }
 
@@ -418,12 +417,12 @@ namespace xchwallet
             this.Confirmations = confirmations;
         }
 
-        public string From()
+        public string InputsAddrs()
         {
             return string.Join(",", TxInputs.Select(i => i.Addr).Distinct());
         }
 
-        public string To()
+        public string OutputsAddrs()
         {
             return string.Join(",", TxOutputs.Select(o => o.Addr).Distinct());
         }
@@ -572,21 +571,25 @@ namespace xchwallet
         public virtual WalletAddr Address { get; set; }
 
         public WalletDirection Direction { get; set; }
-        public bool Acknowledged { get; set; }
+        public WalletTxState State { get; set; }
 
-        public int? WalletTxMetaId { get; set; }
-        public virtual WalletTxMeta Meta { get; set; }
+        public int? TagOnBehalfOfId { get; set; }
+        public virtual WalletTag TagOnBehalfOf { get; set; }
 
-        public string From()
+        public string InputsAddrs()
         {
             return string.Join(",", ChainTx.TxInputs.Where(i => i.WalletAddrId == WalletAddrId).Select(i => i.Addr).Distinct());
         }
 
-        public string To()
+        public string OutputsAddrs()
         {
             return string.Join(",", ChainTx.TxOutputs.Where(o => o.WalletAddrId == WalletAddrId).Select(o => o.Addr).Distinct());
         }
 
+        /// <summary>
+        /// Inputs fill transactions.
+        /// Inputs drain addresses.
+        /// </summary>
         public BigInteger AmountInputs()
         {
             BigInteger amount = 0;
@@ -595,6 +598,10 @@ namespace xchwallet
             return amount;
         }
 
+        /// <summary>
+        /// Outputs drain transactions.
+        /// Outputs fill addresses.
+        /// </summary>
         public BigInteger AmountOutputs()
         {
             BigInteger amount = 0;
@@ -605,20 +612,7 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Meta?.Id} {Meta?.Note} {Meta?.TagOnBehalfOf}>";
-        }
-    }
-
-    public class WalletTxMeta
-    {
-        public int Id { get; set; }
-
-        public string Note { get; set; }
-        public string TagOnBehalfOf { get; set; }
-        
-        public override string ToString()
-        {
-            return $"<{Id} '{Note}' '{TagOnBehalfOf}'>";
+            return $"<{ChainTx} {Address} {Direction} {State} {TagOnBehalfOf}>";
         }
     }
 
@@ -641,8 +635,8 @@ namespace xchwallet
         [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
 
-        public int? WalletTxMetaId { get; set; }
-        public virtual WalletTxMeta Meta { get; set; }
+        public int? TagOnBehalfOfId { get; set; }
+        public virtual WalletTag TagOnBehalfOf { get; set; }
 
         public string TxIds { get; set; }
         

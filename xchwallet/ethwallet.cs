@@ -157,12 +157,20 @@ namespace xchwallet
                     o.WalletAddr = address;
                     db.TxOutputs.Update(o);
                 }
+                // add input (so we can see who its from)
+                var i = db.TxInputGet(scantx.txid, 0);
+                if (i == null)
+                {
+                    i = new TxInput(scantx.txid, scantx.from_, 0, BigInteger.Parse(scantx.value) /*+ fee*/); //TODO: add fee
+                    i.ChainTx = ctx;
+                    db.TxInputs.Add(i);
+                }
                 // add / update wallet tx
                 var dir = scantx.to == address.Address ? WalletDirection.Incomming : WalletDirection.Outgoing;
                 var wtx = db.TxGet(address, ctx, dir);
                 if (wtx == null)
                 {
-                    wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, Acknowledged = false };
+                    wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, State = WalletTxState.None };
                     db.WalletTxs.Add(wtx);
                 }
             }
@@ -265,7 +273,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        WalletTx AddOutgoingTx(string from, string signedTx, WalletTxMeta meta)
+        WalletTx AddOutgoingTx(string from, string signedTx, WalletTag tagOnBehalfOf)
         {
             var address = db.AddrGet(from);
             var tx = new Transaction(signedTx.HexToByteArray());
@@ -287,12 +295,12 @@ namespace xchwallet
             db.TxOutputs.Add(o);
             // create wallet tx
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
-            wtx.Meta = meta;
+            wtx.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletTxs.Add(wtx);
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTxMeta meta=null)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null)
         {
             wtxs = new List<WalletTx>();
             // get gas price
@@ -314,7 +322,7 @@ namespace xchwallet
                     sendTxTask.Wait();
                     var txid = sendTxTask.Result;
                     // add to wallet data
-                    var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
+                    var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, tagOnBehalfOf);
                     ((List<WalletTx>)wtxs).Add(wtx);
                 }
                 catch (Exception ex)

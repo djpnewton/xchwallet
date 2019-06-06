@@ -192,14 +192,14 @@ namespace test
                         if (tx.Direction == WalletDirection.Outgoing)
                         {
                             var inputs = tx.AmountInputs();
-                            var from = tx.From();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (from {from}) {tx.ChainTx.Fee}");
+                            var to = tx.ChainTx.OutputsAddrs();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (to {to}) {tx.ChainTx.Fee}");
                         }
                         else
                         {
                             var outputs = tx.AmountOutputs();
-                            var to = tx.To();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (to {to}) {tx.ChainTx.Fee}");
+                            var from = tx.ChainTx.InputsAddrs();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (from {from}) {tx.ChainTx.Fee}");
                         }
                     }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
@@ -547,7 +547,7 @@ namespace test
             var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
             foreach (var tx in txs)
                 Console.WriteLine(tx);
-            wallet.AcknowledgeTransactions(opts.Tag, txs);
+            wallet.AcknowledgeTransactions(txs);
             wallet.Save();
             return 0;
         }

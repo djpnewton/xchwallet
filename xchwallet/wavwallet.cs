@@ -151,12 +151,20 @@ namespace xchwallet
                                 o.WalletAddr = address;
                                 db.TxOutputs.Update(o);
                             }
+                            // add input (so we can see who its from)
+                            var i = db.TxInputGet(id, 0);
+                            if (i == null)
+                            {
+                                i = new TxInput(id, trans.Sender, 0, amount + fee);
+                                i.ChainTx = ctx;
+                                db.TxInputs.Add(i);
+                            }
                             // add / update wallet tx
                             var dir = trans.Recipient == address.Address ? WalletDirection.Incomming : WalletDirection.Outgoing;
                             var wtx = db.TxGet(address, ctx, dir);
                             if (wtx == null)
                             {
-                                wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, Acknowledged = false };
+                                wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, State = WalletTxState.None };
                                 db.WalletTxs.Add(wtx);
                             }
 
@@ -264,7 +272,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        WalletTx AddOutgoingTx(string from, TransferTransaction signedTx, WalletTxMeta meta)
+        WalletTx AddOutgoingTx(string from, TransferTransaction signedTx, WalletTag tagOnBehalfOf)
         {
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var address = db.AddrGet(from);
@@ -275,7 +283,7 @@ namespace xchwallet
             var ctx = new ChainTx(signedTx.GenerateId(), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
             // create tx input
-            var i = new TxInput(signedTx.GenerateId(), signedTx.Sender, 0, amount + fee);
+            var i = new TxInput(signedTx.GenerateId(), from /*signedTx.Sender is null*/, 0, amount + fee);
             i.ChainTx = ctx;
             i.WalletAddr = address;
             db.TxInputs.Add(i);
@@ -285,12 +293,12 @@ namespace xchwallet
             db.TxOutputs.Add(o);
             // create wallet tx
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
-            wtx.Meta = meta;
+            wtx.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletTxs.Add(wtx);
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTxMeta meta=null)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null)
         {
             wtxs = new List<WalletTx>();
             // create spend transaction from accounts
@@ -312,7 +320,7 @@ namespace xchwallet
                     return WalletError.FailedBroadcast;
                 }
                 // add to wallet data
-                var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, meta);
+                var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, tagOnBehalfOf);
                 ((List<WalletTx>)wtxs).Add(wtx);
             }
             return res;

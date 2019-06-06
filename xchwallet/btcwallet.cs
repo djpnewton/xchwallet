@@ -133,7 +133,7 @@ namespace xchwallet
             var wtx = db.TxGet(address, ctx, WalletDirection.Incomming);
             if (wtx == null)
             {
-                wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming };
+                wtx = new WalletTx{ ChainTx=ctx, Address=address, Direction=WalletDirection.Incomming, State=WalletTxState.None };
                 db.WalletTxs.Add(wtx);
             }
         }
@@ -265,7 +265,7 @@ namespace xchwallet
             return addr;
         }
 
-        IEnumerable<WalletTx> AddOutgoingTx(string txid, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTxMeta meta)
+        IEnumerable<WalletTx> AddOutgoingTx(string txid, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTag tagOnBehalfOf)
         {
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -290,8 +290,8 @@ namespace xchwallet
             var wtxs = new List<WalletTx>();
             foreach ((var addr, var coin, var _) in spent)
             {
-                var wtx = new WalletTx { ChainTx = ctx, Address = addr, Direction = WalletDirection.Outgoing };
-                wtx.Meta = meta;
+                var wtx = new WalletTx { ChainTx = ctx, Address = addr, Direction = WalletDirection.Outgoing, State = WalletTxState.None };
+                wtx.TagOnBehalfOf = tagOnBehalfOf;
                 db.WalletTxs.Add(wtx);
                 wtxs.Add(wtx);
             }
@@ -307,7 +307,7 @@ namespace xchwallet
             return tx.GetFeeRate(coins.ToArray());
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTxMeta meta = null)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null)
         {
             wtxs = new List<WalletTx>();
             var tagChange_ = db.TagGet(tagChange);
@@ -382,7 +382,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtxs_ = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to, amount, fee.Satoshi, meta);
+                var wtxs_ = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to, amount, fee.Satoshi, tagOnBehalfOf);
                 ((List<WalletTx>)wtxs).AddRange(wtxs_);
                 return WalletError.Success;
             }
