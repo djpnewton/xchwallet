@@ -163,7 +163,7 @@ namespace xchwallet
             {
                 setting.Value = value;
                 WalletCfgs.Update(setting);
-            }   
+            }
         }
 
         public void CfgSetInt(string key, int value)
@@ -179,13 +179,14 @@ namespace xchwallet
 
     public class WalletContext : BaseContext
     {
+        public DbSet<TxOutput> TxOutputs { get; set; }
+        public DbSet<TxInput> TxInputs { get; set; }
         public DbSet<ChainTx> ChainTxs { get; set; }
         public DbSet<ChainAttachment> ChainAttachments { get; set; }
         public DbSet<WalletTag> WalletTags { get; set; }
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
         public DbSet<WalletPendingSpend> WalletPendingSpends { get; set; }
-        public DbSet<WalletTxMeta> WalletTxMetas { get; set; }
 
         public int LastPathIndex
         {
@@ -212,12 +213,17 @@ namespace xchwallet
                 .HasIndex(a => a.Address)
                 .IsUnique();
 
+            builder.Entity<TxOutput>()
+                .Property(t => t.Amount)
+                .HasConversion(bigIntConverter);
+
+            builder.Entity<TxInput>()
+                .Property(t => t.Amount)
+                .HasConversion(bigIntConverter);
+
             builder.Entity<ChainTx>()
                 .HasIndex(t => t.TxId)
                 .IsUnique();
-            builder.Entity<ChainTx>()
-                .Property(t => t.Amount)
-                .HasConversion(bigIntConverter);
             builder.Entity<ChainTx>()
                 .Property(t => t.Fee)
                 .HasConversion(bigIntConverter);
@@ -241,7 +247,7 @@ namespace xchwallet
 
         public WalletTag TagCreate(string tag)
         {
-            var _tag = new WalletTag{ Tag = tag };
+            var _tag = new WalletTag { Tag = tag };
             WalletTags.Add(_tag);
             return _tag;
         }
@@ -267,9 +273,9 @@ namespace xchwallet
             return new List<WalletTx>();
         }
 
-        public WalletTx TxGet(WalletAddr addr, ChainTx tx)
+        public WalletTx TxGet(WalletAddr addr, ChainTx tx, WalletDirection dir)
         {
-            return WalletTxs.SingleOrDefault(t => t.WalletAddrId == addr.Id && t.ChainTxId == tx.Id);
+            return WalletTxs.SingleOrDefault(t => t.WalletAddrId == addr.Id && t.ChainTxId == tx.Id && t.Direction == dir);
         }
 
         public void TxDelete(string txid)
@@ -279,12 +285,7 @@ namespace xchwallet
             {
                 var txs = WalletTxs.Where(t => t.ChainTxId == ctx.Id);
                 foreach (var tx in txs)
-                {
-                    var pendingSpend = WalletPendingSpends.SingleOrDefault(s => s.WalletTxId == tx.Id);
-                    if (pendingSpend != null)
-                        WalletPendingSpends.Remove(pendingSpend);
                     WalletTxs.Remove(tx);
-                }
             }
         }
 
@@ -292,7 +293,7 @@ namespace xchwallet
         {
             var addr = AddrGet(address);
             if (addr != null)
-                return WalletTxs.Where(t => t.WalletAddrId == addr.Id && t.Acknowledged == false);
+                return WalletTxs.Where(t => t.WalletAddrId == addr.Id && t.State != WalletTxState.Ack);
             return new List<WalletTx>();
         }
 
@@ -306,19 +307,19 @@ namespace xchwallet
             return ChainTxs.SingleOrDefault(t => t.TxId == txid);
         }
 
+        public TxOutput TxOutputGet(string txid, uint n)
+        {
+            return TxOutputs.SingleOrDefault(o => o.TxId == txid && o.N == n);
+        }
+
+        public TxInput TxInputGet(string txid, uint n)
+        {
+            return TxInputs.SingleOrDefault(i => i.TxId == txid && i.N == n);
+        }
+
         public WalletPendingSpend PendingSpendGet(string spendCode)
         {
             return WalletPendingSpends.SingleOrDefault(s => s.SpendCode == spendCode);
-        }
-
-        public WalletTxMeta WalletTxAddMeta(WalletTx wtx)
-        {
-            if (wtx.Meta != null)
-                throw new WalletException("WalletTx already has a Meta field");
-            var meta = new WalletTxMeta();
-            wtx.Meta = meta;
-            WalletTxMetas.Add(meta);
-            return meta;
         }
     }
 
@@ -334,15 +335,64 @@ namespace xchwallet
         }
     }
 
+    public abstract class TxOutputBase
+    {
+        public int Id { get; set; }
+        public int ChainTxId { get; set; }
+        public int? WalletAddrId { get; set; }
+        public virtual ChainTx ChainTx { get; set; }
+        public virtual WalletAddr WalletAddr { get; set; }
+        public string TxId { get; set; }
+        public string Addr { get; set; }
+        public uint N { get; set; }
+        [Column(TypeName = "varchar(255)")]
+        public BigInteger Amount { get; set; }
+
+        public TxOutputBase()
+        {
+            this.TxId = null;
+            this.Addr = null;
+            this.N = 0;
+            this.Amount = 0;
+        }
+
+        public TxOutputBase(string txid, string addr, uint n, BigInteger amount)
+        {
+            this.TxId = txid;
+            this.Addr = addr;
+            this.N = n;
+            this.Amount = amount;
+        }
+
+        public override string ToString()
+        {
+            return $"<{N} {Amount}>";
+        }
+    }
+
+    public class TxOutput : TxOutputBase
+    {
+        public TxOutput() : base()
+        { }
+        public TxOutput(string txid, string addr, uint n, BigInteger amount) : base(txid, addr, n, amount)
+        { }
+   }
+
+    public class TxInput : TxOutputBase
+    {
+        public TxInput() : base()
+        { }
+        public TxInput(string txid, string addr, uint n, BigInteger amount) : base(txid, addr, n, amount)
+        { }
+    }
+
     public class ChainTx
     {
         public int Id { get; set; }
         public string TxId { get; set; }
         public long Date { get; set; }
-        public string From { get; set; }
-        public string To { get; set; }
-        [Column(TypeName = "varchar(255)")]
-        public BigInteger Amount { get; set; }
+        public virtual IEnumerable<TxOutput> TxOutputs { get; set; }
+        public virtual IEnumerable<TxInput> TxInputs { get; set; }
         [Column(TypeName = "varchar(255)")]
         public BigInteger Fee { get; set; }
         public long Height { get; set; }
@@ -353,24 +403,50 @@ namespace xchwallet
         {
             this.TxId = null;
             this.Date = 0;
-            this.From = null;
-            this.To = null;
-            this.Amount = 0;
             this.Fee = 0;
             this.Height = -1;
             this.Confirmations = 0;
         }
 
-        public ChainTx(string txid, long date, string from, string to, BigInteger amount, BigInteger fee, long height, long confirmations)
+        public ChainTx(string txid, long date, BigInteger fee, long height, long confirmations)
         {
             this.TxId = txid;
             this.Date = date;
-            this.From = from;
-            this.To = to;
-            this.Amount = amount;
             this.Fee = fee;
             this.Height = height;
             this.Confirmations = confirmations;
+        }
+
+        public string InputsAddrs()
+        {
+            return string.Join(",", TxInputs.Select(i => i.Addr).Distinct());
+        }
+
+        public string OutputsAddrs()
+        {
+            return string.Join(",", TxOutputs.Select(o => o.Addr).Distinct());
+        }
+
+        public BigInteger AmountInputs(string addr=null)
+        {
+            BigInteger amount = 0;
+            var inputs = TxInputs;
+            if (addr != null)
+                inputs = inputs.Where(i => i.WalletAddr.Address == addr);
+            foreach (var i in inputs)
+                amount += i.Amount;
+            return amount;
+        }
+
+        public BigInteger AmountOutputs(string addr = null)
+        {
+            BigInteger amount = 0;
+            var outputs = TxOutputs;
+            if (addr != null)
+                outputs = outputs.Where(o => o.WalletAddr.Address == addr);
+            foreach (var o in outputs)
+                amount += o.Amount;
+            return amount;
         }
 
         public override string ToString()
@@ -378,7 +454,7 @@ namespace xchwallet
             string att = null;
             if (Attachment != null)
                 att = System.Text.Encoding.UTF8.GetString(Attachment.Data);
-            return $"<{TxId} {Date} {From} {To} {Amount} {Fee} {Height} {Confirmations} '{att}'>";
+            return $"<{TxId} {Date} +{AmountInputs()} -{AmountOutputs()} {Fee} {Height} {Confirmations} '{att}'>";
         }
     }
 
@@ -432,6 +508,8 @@ namespace xchwallet
         public int TagId { get; set; }
         public virtual WalletTag Tag { get; set; }
         public virtual IEnumerable<WalletTx> Txs { get; set; }
+        public virtual IEnumerable<TxOutput> TxOutputs { get; set; }
+        public virtual IEnumerable<TxInput> TxInputs { get; set; }
 
         public string Path { get; set; }
         public int PathIndex { get; set; }
@@ -454,6 +532,28 @@ namespace xchwallet
             this.Address = address;
         }
 
+        public BigInteger AmountRecieved(int minConfs=0)
+        {
+            BigInteger amount = 0;
+            foreach (var o in TxOutputs)
+                if (minConfs <= 0 || o.ChainTx.Confirmations >= minConfs)
+                    amount += o.Amount;
+            return amount;
+        }
+
+        public BigInteger AmountSent()
+        {
+            BigInteger amount = 0;
+            foreach (var i in TxInputs)
+                amount += i.Amount;
+            return amount;
+        }
+
+        public BigInteger Balance(int minConfs=0)
+        {
+            return AmountRecieved(minConfs) - AmountSent();
+        }
+
         public override string ToString()
         {
             return $"<'{Tag}' - {Path} - {Address}>";
@@ -471,27 +571,48 @@ namespace xchwallet
         public virtual WalletAddr Address { get; set; }
 
         public WalletDirection Direction { get; set; }
-        public bool Acknowledged { get; set; }
+        public WalletTxState State { get; set; }
 
-        public int WalletTxMetaId { get; set; }
-        public virtual WalletTxMeta Meta { get; set; }
-        
-        public override string ToString()
+        public int? TagOnBehalfOfId { get; set; }
+        public virtual WalletTag TagOnBehalfOf { get; set; }
+
+        public string InputsAddrs()
         {
-            return $"<{ChainTx} {Address} {Direction} {Acknowledged} {Meta?.Id} {Meta?.Note} {Meta?.TagOnBehalfOf}>";
+            return string.Join(",", ChainTx.TxInputs.Where(i => i.WalletAddrId == WalletAddrId).Select(i => i.Addr).Distinct());
         }
-    }
 
-    public class WalletTxMeta
-    {
-        public int Id { get; set; }
+        public string OutputsAddrs()
+        {
+            return string.Join(",", ChainTx.TxOutputs.Where(o => o.WalletAddrId == WalletAddrId).Select(o => o.Addr).Distinct());
+        }
 
-        public string Note { get; set; }
-        public string TagOnBehalfOf { get; set; }
-        
+        /// <summary>
+        /// Inputs fill transactions.
+        /// Inputs drain addresses.
+        /// </summary>
+        public BigInteger AmountInputs()
+        {
+            BigInteger amount = 0;
+            foreach (var i in ChainTx.TxInputs.Where(i => i.WalletAddrId == WalletAddrId))
+                amount += i.Amount;
+            return amount;
+        }
+
+        /// <summary>
+        /// Outputs drain transactions.
+        /// Outputs fill addresses.
+        /// </summary>
+        public BigInteger AmountOutputs()
+        {
+            BigInteger amount = 0;
+            foreach (var o in ChainTx.TxOutputs.Where(o => o.WalletAddrId == WalletAddrId))
+                    amount += o.Amount;
+            return amount;
+        }
+
         public override string ToString()
         {
-            return $"<{Id} '{Note}' '{TagOnBehalfOf}'>";
+            return $"<{ChainTx} {Address} {Direction} {State} {TagOnBehalfOf}>";
         }
     }
 
@@ -505,9 +626,6 @@ namespace xchwallet
         public int TagChangeId { get; set; }
         public virtual WalletTag TagChange { get; set; }
 
-        public int? WalletTxId { get; set; }
-        public virtual WalletTx Tx { get; set; }
-
         public long Date { get; set; }
         public string SpendCode { get; set; }
         public PendingSpendState State { get; set; }
@@ -517,12 +635,14 @@ namespace xchwallet
         [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
 
-        public int WalletTxMetaId { get; set; }
-        public virtual WalletTxMeta Meta { get; set; }
+        public int? TagOnBehalfOfId { get; set; }
+        public virtual WalletTag TagOnBehalfOf { get; set; }
+
+        public string TxIds { get; set; }
         
         public override string ToString()
         {
-            return $"<{SpendCode} {Date} {To} {Amount} {State} {Tag} {TagChange} {Tx}>";
+            return $"<{SpendCode} {Date} {To} {Amount} {State} {Tag} {TagChange} {TxIds}>";
         }
     }
 

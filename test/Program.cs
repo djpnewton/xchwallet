@@ -188,7 +188,20 @@ namespace test
                 var txs = wallet.GetTransactions(tag.Tag);
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
-                        Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, {tx.ChainTx.Amount}, {tx.ChainTx.Fee}");
+                    {
+                        if (tx.Direction == WalletDirection.Outgoing)
+                        {
+                            var inputs = tx.AmountInputs();
+                            var to = tx.ChainTx.OutputsAddrs();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (to {to}) {tx.ChainTx.Fee}");
+                        }
+                        else
+                        {
+                            var outputs = tx.AmountOutputs();
+                            var from = tx.ChainTx.InputsAddrs();
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (from {from}) {tx.ChainTx.Fee}");
+                        }
+                    }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
                 Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
                 totalBalance += balance;
@@ -212,7 +225,7 @@ namespace test
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, false, new Uri("http://localhost:24444"));
+                return new BtcWallet(GetLogger(), db, false, new Uri("http://10.50.1.100:24444"));
             else if (walletType == EthWallet.TYPE)
                 return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
             else if (walletType == WavWallet.TYPE)
@@ -225,13 +238,12 @@ namespace test
 
         static WalletTag EnsureTagExists(IWallet wallet, string tag)
         {
-            var tags = wallet.GetTags();
-            foreach (var tag_ in tags)
-                if (tag_.Tag == tag)
-                    return tag_;
-            var tag__ = wallet.NewTag(tag);
+            var tag_ = wallet.GetTags().SingleOrDefault(t => t.Tag == tag);
+            if (tag_ != null)
+                return tag_;
+            tag_ = wallet.NewTag(tag);
             wallet.Save();
-            return tag__;
+            return tag_;
         }
 
         static IWallet OpenWallet(CommonOptions opts)
@@ -324,8 +336,8 @@ namespace test
                             return 1;
                         }
                         dynamic res = JsonConvert.DeserializeObject(resp.Content);
-                        balance += (long)res.data.balance;;
-                        Console.WriteLine(count++);
+                        balance += (long)res.data.balance + (long)res.data.pendingReceivedAmount - (long)res.data.pendingSentAmount;
+                        Console.WriteLine($"{count++} - {resp.ResponseUri}");
                         System.Threading.Thread.Sleep(500);
                     }
                     Console.WriteLine($"::block explorer balance: {balance}, ({wallet.AmountToString(balance)} {wallet.Type()})\n");
@@ -338,8 +350,10 @@ namespace test
             }
             if (opts.Update)
             {
-                wallet.UpdateFromBlockchain();
+                var dbtx = wallet.BeginDbTransaction();
+                wallet.UpdateFromBlockchain(dbtx);
                 wallet.Save();
+                dbtx.Commit();
             }
             PrintWallet(wallet, opts.MinimumConfirmations);
             return 0;
@@ -441,10 +455,9 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            WalletTx wtx;
-            var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out wtx);
+            var res = wallet.PendingSpendAction(opts.SpendCode, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs);
             Console.WriteLine(res);
-            if (wtx != null)
+            foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
@@ -468,11 +481,10 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            WalletTx wtx;
             EnsureTagExists(wallet, opts.Tag);
-            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out wtx);
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs);
             Console.WriteLine(res);
-            if (wtx != null)
+            foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
             wallet.Save();
             return 0;
@@ -489,9 +501,8 @@ namespace test
             var tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            IEnumerable<WalletTx> wtxs;
             EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs, opts.MinimumConfirmations);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
@@ -536,7 +547,7 @@ namespace test
             var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
             foreach (var tx in txs)
                 Console.WriteLine(tx);
-            wallet.AcknowledgeTransactions(opts.Tag, txs);
+            wallet.AcknowledgeTransactions(txs);
             wallet.Save();
             return 0;
         }
