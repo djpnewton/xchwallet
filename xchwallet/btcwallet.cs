@@ -27,8 +27,28 @@ namespace xchwallet
         }
 
         readonly BitcoinExtKey key = null;
-        readonly ExplorerClient client = null;
         readonly DirectDerivationStrategy pubkey = null;
+        readonly Uri nbxplorerAddress = null;
+        ExplorerClient _client = null;
+
+        NBXplorerNetwork GetNbxNetwork()
+        {
+            if (mainnet)
+                return new NBXplorerNetworkProvider(NetworkType.Mainnet).GetFromCryptoCode("BTC");
+            else
+                return new NBXplorerNetworkProvider(NetworkType.Testnet).GetFromCryptoCode("BTC");
+        }
+
+        ExplorerClient GetClient()
+        {
+            if (_client == null)
+            {
+                // create NBXplorer client
+                _client = new ExplorerClient(GetNbxNetwork(), nbxplorerAddress);
+                _client.Track(pubkey);
+            }
+            return _client;
+        }
 
         Network GetNetwork()
         {
@@ -38,6 +58,7 @@ namespace xchwallet
         public BtcWallet(ILogger logger, WalletContext db, bool mainnet, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db, mainnet)
         {
             this.logger = logger;
+            this.nbxplorerAddress = nbxplorerAddress;
 
             // create extended key
             var network = GetNetwork();
@@ -46,14 +67,6 @@ namespace xchwallet
             if (useLegacyAddrs)
                 strpubkey = strpubkey + "-[legacy]";
             pubkey = (DirectDerivationStrategy)new DerivationStrategyFactory(network).Parse(strpubkey);
-            // create NBXplorer client
-            NBXplorerNetwork nbxnetwork;
-            if (mainnet)
-                nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Mainnet).GetFromCryptoCode("BTC");
-            else
-                nbxnetwork = new NBXplorerNetworkProvider(NetworkType.Testnet).GetFromCryptoCode("BTC");
-            client = new ExplorerClient(nbxnetwork, nbxplorerAddress);
-            client.Track(pubkey);
         }
 
         public override bool IsMainnet()
@@ -68,8 +81,8 @@ namespace xchwallet
             // create new address that is unused
             var _tag = db.TagGet(tag);
             Util.WalletAssert(_tag != null, $"Tag '{tag}' does not exist");
-            var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
-            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
+            var keypathInfo = GetClient().GetUnused(pubkey, DerivationFeature.Deposit, reserve: true);
+            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(GetClient().Network.NBitcoinNetwork);
             var address = new WalletAddr(_tag, keypathInfo.KeyPath.ToString(), 0, addr.ToString());
             // add to address list
             db.WalletAddrs.Add(address);
@@ -78,7 +91,7 @@ namespace xchwallet
 
         private BitcoinAddress AddressOf(ExtPubKey pubkey, KeyPath path)
 		{
-			return pubkey.Derive(path).PubKey.Hash.GetAddress(client.Network.NBitcoinNetwork);
+			return pubkey.Derive(path).PubKey.Hash.GetAddress(GetNetwork());
         }
 
         private void processUtxo(NBXplorer.Models.UTXO utxo, int currentHeight, bool confirmed)
@@ -87,7 +100,7 @@ namespace xchwallet
             // - read OP_RETURN ?
             
             //var addr = AddressOf(pubkey.Root, utxo.KeyPath);
-            var to = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
+            var to = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork());
             var id = utxo.Outpoint.Hash.ToString();
             var date = utxo.Timestamp.ToUnixTimeSeconds();
             var height = confirmed ? currentHeight - (utxo.Confirmations-1) : -1;
@@ -149,7 +162,7 @@ namespace xchwallet
 
         private void UpdateTxs()
         {
-            var utxos = client.GetUTXOs(pubkey);
+            var utxos = GetClient().GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)
             {
                 processUtxo(item, utxos.CurrentHeight, false);
@@ -175,32 +188,6 @@ namespace xchwallet
                         ctx.Confirmations = tx.Confirmations;
                         dirty = true;
                     }
-                    /*
-                    var inputCount = ctx.BalanceUpdates.Where(bu => bu.Input == true).Count();
-                    var outputCount = ctx.BalanceUpdates.Where(bu => bu.Input == false).Count();
-                    if (tx.Inputs.Count() != inputCount)
-                    {
-                        logger.LogError($"Different input count for {tx.TransactionId} {tx.Inputs.Count()} vs {inputCount}");
-                        uint n = 0;
-                        foreach (var input in tx.Inputs)
-                        {
-                            var destAddr = input.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
-                            var walletAddr = db.WalletAddrs.SingleOrDefault(a => a.Address == destAddr.ToString());
-                            if (walletAddr != null)
-                            {
-                                var bu = new BalanceUpdate(ctx.TxId, null, walletAddr.Address, true, n, input.Value.Satoshi);
-
-                                logger.LogInformation($"{walletAddr.Address}, {input.Index}, {n}, {input.Value.Satoshi}");
-
-                                n++;
-                            }
-                        }
-                    }
-                    if (tx.Outputs.Count() != outputCount)
-                    {
-                        logger.LogError($"Different output count for {tx.TransactionId} {tx.Outputs.Count()} vs {outputCount}");
-                    }
-                    */
                     if (dirty)
                         db.ChainTxs.Update(ctx);
                 }
@@ -213,13 +200,13 @@ namespace xchwallet
         {
             var baddr = BitcoinAddress.Create(addr.Address, GetNetwork());
             var trackedSource = TrackedSource.Create(baddr);
-            var txs = client.GetTransactions(trackedSource);
+            var txs = GetClient().GetTransactions(trackedSource);
             UpdateTxConfirmations(txs);
         }
 
         private void UpdateTxConfirmations(DerivationStrategyBase derivationStrat)
         {
-            var txs = client.GetTransactions(derivationStrat);
+            var txs = GetClient().GetTransactions(derivationStrat);
             UpdateTxConfirmations(txs);
         }
 
@@ -253,8 +240,8 @@ namespace xchwallet
         public BitcoinAddress AddChangeAddress(WalletTag tag)
         {
             // get new unused address
-            var keypathInfo = client.GetUnused(pubkey, DerivationFeature.Change, reserve: false);
-            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork);
+            var keypathInfo = GetClient().GetUnused(pubkey, DerivationFeature.Change, reserve: false);
+            var addr = keypathInfo.ScriptPubKey.GetDestinationAddress(GetNetwork());
             // check that address is not already present in the db (we used 'reserve: false')
             var address = db.AddrGet(addr.ToString());
             if (address != null)
@@ -313,24 +300,24 @@ namespace xchwallet
             var tagChange_ = db.TagGet(tagChange);
             Util.WalletAssert(tagChange_ != null, $"Tag '{tagChange}' does not exist");
             // create tx template with destination as first output
-            var tx = Transaction.Create(client.Network.NBitcoinNetwork);
+            var tx = Transaction.Create(GetNetwork());
             var money = new Money((ulong)amount);
-            var toaddr = BitcoinAddress.Create(to, client.Network.NBitcoinNetwork);
+            var toaddr = BitcoinAddress.Create(to, GetNetwork());
             var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tag
             var addrs = GetAddresses(tag);
             var candidates = new List<Tuple<WalletAddr, Coin>>();
-            var utxos = client.GetUTXOs(pubkey);
+            var utxos = GetClient().GetUTXOs(pubkey);
             foreach (var utxo in utxos.Unconfirmed.UTXOs)
             {
-                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                 var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                 if (addr != null)
                     candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
             }
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
-                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                 var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                 if (addr != null)
                     candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
@@ -378,7 +365,7 @@ namespace xchwallet
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
             // broadcast transaction
-            var result = client.Broadcast(tx);
+            var result = GetClient().Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
@@ -403,20 +390,20 @@ namespace xchwallet
             foreach (var tag in tagFrom)
                 amount += this.GetBalance(tag);
             // create tx template with destination as first output
-            var tx = Transaction.Create(client.Network.NBitcoinNetwork);
+            var tx = Transaction.Create(GetNetwork());
             var money = new Money((ulong)amount);
-            var toaddr = BitcoinAddress.Create(to.Address, client.Network.NBitcoinNetwork);
+            var toaddr = BitcoinAddress.Create(to.Address, GetNetwork());
             var output = tx.Outputs.Add(money, toaddr);
             // create list of candidate coins to spend based on UTXOs from the selected tags
             var candidates = new List<Tuple<WalletAddr, Coin>>();
-            var utxos = client.GetUTXOs(pubkey);
+            var utxos = GetClient().GetUTXOs(pubkey);
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
                 if (minConfs <= 0)
                     foreach (var utxo in utxos.Unconfirmed.UTXOs)
                     {
-                        var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                        var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                         var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                         if (addr != null)
                             candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
@@ -425,7 +412,7 @@ namespace xchwallet
                 {
                     if (minConfs > 0 && utxo.Confirmations < minConfs)
                         continue;
-                    var addrStr = utxo.ScriptPubKey.GetDestinationAddress(client.Network.NBitcoinNetwork).ToString();
+                    var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                     var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                     if (addr != null)
                         candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
@@ -465,7 +452,7 @@ namespace xchwallet
             if (fee.Satoshi > feeMax)
                 return WalletError.MaxFeeBreached;
             // broadcast transaction
-            var result = client.Broadcast(tx);
+            var result = GetClient().Broadcast(tx);
             if (result.Success)
             {
                 // log outgoing transaction
@@ -512,7 +499,7 @@ namespace xchwallet
             var req = new RescanRequest();
             foreach (var tx in txs)
                 req.Transactions.Add(new RescanRequest.TransactionToRescan { TransactionId = uint256.Parse(tx.TxId), BlockId = uint256.Parse(tx.BlockHash) });
-            client.Rescan(req);
+            GetClient().Rescan(req);
             return true;
         }
         /*
