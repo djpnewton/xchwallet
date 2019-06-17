@@ -39,9 +39,16 @@
       ignore_errors: yes
 
 - import_playbook: firewall.yml
-- import_playbook: geth.yml
+  when: deploy_type != "local"
+- import_playbook: updates.yml
+  when: deploy_type != "local"
+- import_playbook: fail2ban.yml
+  when: deploy_type != "local"
+- import_playbook: logwatch.yml
+  when: deploy_type != "local"
+#- import_playbook: geth.yml
 - import_playbook: bitcoind.yml
-- import_playbook: gethtxscan.yml
+#- import_playbook: gethtxscan.yml
 - import_playbook: dotnetcore.yml
 - import_playbook: nbxplorer.yml
 - import_playbook: java.yml
