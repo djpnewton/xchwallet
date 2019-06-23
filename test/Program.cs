@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using RestSharp;
 using Newtonsoft.Json;
 using xchwallet;
+using NBitcoin;
 
 namespace test
 {
@@ -146,6 +147,13 @@ namespace test
             public string TxId { get; set; }
         }
 
+        [Verb("load_test", HelpText = "Wallet load testing")]
+        class LoadTestOptions : CommonOptions
+        {
+            [Option('p', "privateKey", Required = true, HelpText = "Private key to send from (hex)")]
+            public string PrivateKey { get; set; }
+        }
+
         static ILogger _logger = null;
         static ILogger GetLogger()
         {
@@ -244,6 +252,28 @@ namespace test
             var wallet = CreateWallet(opts.DbName, opts.Type, opts.ShowSql);
             wallet.Save();
             return 0;
+        }
+
+        static IRestResponse SmartBtcComAuPushTx(bool mainnet, string txHex)
+        {
+            var url = "https://api.smartbit.com.au/v1/blockchain";
+            if (!mainnet)
+                url = "https://testnet-api.smartbit.com.au/v1/blockchain";
+            var client = new RestClient(url);
+            var req = new RestRequest("/pushtx", DataFormat.Json);
+            var body = string.Format("{{\"hex\": \"{0}\"}}", txHex);
+            req.AddJsonBody(body);
+            return client.Post(req);
+        }
+
+        static IRestResponse SmartBtcComAuRequest(bool mainnet, string endpoint)
+        {
+            var url = "https://api.smartbit.com.au/v1/blockchain";
+            if (!mainnet)
+                url = "https://testnet-api.smartbit.com.au/v1/blockchain";
+            var client = new RestClient(url);
+            var req = new RestRequest(endpoint, DataFormat.Json);
+            return client.Get(req);
         }
 
         static IRestResponse BtcApsComRequest(bool mainnet, string endpoint)
@@ -525,11 +555,249 @@ namespace test
             return 0;
         }
 
+        static (string, bool, List<string>) SendBtcFunds(bool mainnet, string privKey, string addr1, string addr2)
+        {
+            var sentTxIds = new List<string>();
+            Console.WriteLine($"::send btc funds");
+            var network = Network.TestNet;
+            var key = new Key(System.Text.Encoding.ASCII.GetBytes(privKey));
+            var secret = key.GetBitcoinSecret(network);
+            var addr = secret.PubKey.GetAddress(ScriptPubKeyType.Legacy, network);
+            var addrStr = addr.ToString();
+            Console.WriteLine($"  ::privkey: {privKey}");
+            Console.WriteLine($"  ::addr:    {addr}");
+            var resp = SmartBtcComAuRequest(mainnet, $"/address/{addr}");
+            if (resp.StatusCode != System.Net.HttpStatusCode.OK)
+            {
+                Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                return (addrStr, false, sentTxIds);
+            }
+            dynamic res = JsonConvert.DeserializeObject(resp.Content);
+            var balance = (long)res.address.total.balance_int;
+            Console.WriteLine($"  ::balance: {balance} sats");
+
+            if (balance > 0)
+            {
+                // find utxos from address transactions
+                var coins = new List<Coin>();
+                long coinsAmount = 0;
+                while (true)
+                {
+                    foreach (var tx in res.address.transactions)
+                    {
+                        var txHash = new uint256(tx.txid.Value);
+                        foreach (var output in tx.outputs)
+                        {
+                            var hasAddr = false;
+                            foreach (var outaddr in output.addresses)
+                                if (outaddr == addr)
+                                    hasAddr = true;
+                            if (hasAddr && output.spend_txid == null)
+                            {
+                                var value = (long)output.value_int;
+                                var n = (uint)output.n;
+                                var outpoint = new OutPoint(txHash, n);
+                                coins.Add(new Coin(txHash, n, new Money(value), addr.ScriptPubKey));
+                                Console.WriteLine($"    + {tx.txid} we have {value} sats unspent");
+                                coinsAmount += value;
+                            }
+                        }
+                    }
+                    if (coinsAmount >= balance)
+                        break;
+                    if (res.address.transaction_paging.next != null)
+                    {
+                        resp = BtcApsComRequest(mainnet, $"/address/{addr}?next={res.address.transaction_paging.next}");
+                        if (resp.StatusCode != System.Net.HttpStatusCode.OK)
+                        {
+                            Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                            return (addrStr, false, sentTxIds);
+                        }
+                        res = JsonConvert.DeserializeObject(resp.Content);
+                    }
+                    else
+                        break;
+                }
+                if (coinsAmount == 0)
+                {
+                    Console.WriteLine("  no balance (coinsAmount == 0).. skipping");
+                    return (addrStr, false, sentTxIds);
+                }
+                // create transaction
+                var minSatPerByte = 1;
+                var absoluteFee = 100;
+                var transaction = Transaction.Create(network);
+                long totalIn = 0;
+                while (true)
+                {
+                    // reset transaction
+                    transaction.Inputs.Clear();
+                    transaction.Outputs.Clear();
+                    totalIn = 0;
+                    // add inputs
+                    foreach (var coin in coins)
+                    {
+                        totalIn += coin.Amount.Satoshi;
+                        transaction.Inputs.Add(new TxIn()
+                        {
+                            PrevOut = coin.Outpoint,
+                            ScriptSig = coin.TxOut.ScriptPubKey,
+                        });
+                    }
+                    // add outputs
+                    var outputAmounts = (totalIn - absoluteFee) / 3;
+                    var outputTargets = new string[] { addr1, addr2, addr1 };
+                    foreach (var target in outputTargets)
+                    {
+                        var targetAddr = BitcoinAddress.Create(target, network);
+                        var txout = new TxOut(new Money(outputAmounts, MoneyUnit.Satoshi), targetAddr);
+                        transaction.Outputs.Add(txout);
+                    }
+                    var message = "Long live NBitcoin and its makers!";
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(message);
+                    transaction.Outputs.Add(new TxOut()
+                    {
+                        Value = Money.Zero,
+                        ScriptPubKey = TxNullDataTemplate.Instance.GenerateScriptPubKey(bytes)
+                    });
+                    // sign transaction
+                    transaction.Sign(secret, coins.ToArray());
+                    // check fee rate
+                    if (transaction.GetFeeRate(coins.ToArray()).SatoshiPerByte >= minSatPerByte)
+                        break;
+                    // increment absolute fee
+                    absoluteFee += 100;
+                }
+                //Console.WriteLine(transaction);
+                // print total in, fee rate and size
+                Console.WriteLine($"  ::total in - {totalIn}");
+                var feeRate = transaction.GetFeeRate(coins.ToArray());
+                var size = transaction.GetSerializedSize();
+                var vsize = transaction.GetVirtualSize();
+                Console.WriteLine($"  ::feerate - {feeRate.SatoshiPerByte} sats/byte\n  ::size    - {size} bytes\n  ::vsize   - {vsize} bytes");
+                // broadcast transaction
+                Console.WriteLine($"  ::broadcast tx - {transaction.GetHash()}");
+                var txhex = transaction.ToHex();
+                resp = SmartBtcComAuPushTx(mainnet, txhex);
+                if (resp.StatusCode != System.Net.HttpStatusCode.OK)
+                {
+                    Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                    Console.WriteLine($"  {resp.Content}");
+                    return (addrStr, false, sentTxIds);
+                }
+                Console.WriteLine($"  {resp.Content}");
+                sentTxIds.Add(transaction.GetHash().ToString());
+            }
+            return (addrStr, true, sentTxIds);
+        }
+
+        static int RunLoadTest(LoadTestOptions opts)
+        {
+            var wallet = OpenWallet(opts);
+            if (wallet == null)
+                return 1;
+
+            // create tags/addresses
+            Console.WriteLine("::create tags/addrs");
+            var one = "1"; var two = "2"; var cons = "consolidate";
+            var tags = new string[] { one, two, cons };
+            foreach (var tag in tags)
+            {
+                Console.WriteLine($"  - {tag}");
+                if (!wallet.HasTag(tag))
+                {
+                    wallet.NewTag(tag);
+                    wallet.Save();
+                }
+                var addr = wallet.NewOrExistingAddress(tag);
+                Console.WriteLine($"    {addr.Address}");
+            }
+            wallet.Save();
+            Console.WriteLine();
+
+            // send funds to wallet addresses
+            BigInteger fee = 0;
+            List<string> sentTxids = null;
+            string originalAddr = null;
+            if (wallet is BtcWallet)
+            {
+                (var origAddr_, var withoutErrors, var sentTxIds_) = SendBtcFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
+                originalAddr = origAddr_;
+                sentTxids = sentTxIds_;
+                if (withoutErrors)
+                    // sleep for a bit to wait for the tx to propagate
+                    System.Threading.Thread.Sleep(10000);
+                fee = 113;
+            }
+            else if (wallet is ZapWallet)
+            {
+                throw new ApplicationException("TODO zap");
+                fee = 1;
+            }
+            else if (wallet is WavWallet)
+            {
+                throw new ApplicationException("TODO waves");
+                fee = 10000;
+            }
+            else if (wallet is EthWallet)
+            {
+                throw new ApplicationException("TODO eth");
+                fee = 1;
+            }
+            Console.WriteLine();
+
+            // consolidate
+            Console.WriteLine("::consolidate");
+            var dbtx = wallet.BeginDbTransaction();
+            wallet.UpdateFromBlockchain(dbtx);
+            wallet.Save();
+            dbtx.Commit();
+            var balance = wallet.GetBalance(new string[] { one, two });
+            if (balance > 0)
+            {
+                var err = wallet.Consolidate(new string[] { one, two }, cons, 20000, 1, out var wtxs);
+                foreach (var tx in wtxs)
+                    Console.WriteLine($"  - {tx.ChainTx.TxId}");
+                Console.WriteLine($"  {err}");
+                wallet.Save();
+                if (err != WalletError.Success)
+                    return 1;
+                // allow time for tx to propagate
+                System.Threading.Thread.Sleep(10000);
+            }
+            else
+                Console.WriteLine("  no balance.. skipping");
+            Console.WriteLine();
+
+            // send to original address
+            Console.WriteLine("::send back to original address");
+            dbtx = wallet.BeginDbTransaction();
+            wallet.UpdateFromBlockchain(dbtx);
+            wallet.Save();
+            dbtx.Commit();
+            balance = wallet.GetBalance(cons);
+            if (balance > 0)
+            {
+                var err = wallet.Spend(cons, cons, originalAddr, balance - fee, 20000, 1, out var wtxs);
+                foreach (var tx in wtxs)
+                    Console.WriteLine($"  - {tx.ChainTx.TxId}");
+                Console.WriteLine($"  {err}");
+                wallet.Save();
+                if (err != WalletError.Success)
+                    return 1;
+            }
+            else
+                Console.WriteLine("  no balance.. skipping");
+            Console.WriteLine();
+
+            return 0;
+        }
+
         static int Main(string[] args)
         {
             return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions>(args)
+                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions, LoadTestOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
@@ -544,6 +812,7 @@ namespace test
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
                 (DeleteTxOptions opts) => RunDeleteTx(opts),
+                (LoadTestOptions opts) => RunLoadTest(opts),
                 errs => 1);
         }
     }

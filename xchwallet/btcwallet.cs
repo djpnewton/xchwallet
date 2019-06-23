@@ -317,6 +317,9 @@ namespace xchwallet
             }
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
+                // check is not spent but unconfirmed
+                if (utxos.Unconfirmed.SpentOutpoints.Any(so => so.Hash == utxo.Outpoint.Hash))
+                    continue;
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                 var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                 if (addr != null)
@@ -389,6 +392,9 @@ namespace xchwallet
             BigInteger amount = 0;
             foreach (var tag in tagFrom)
                 amount += this.GetBalance(tag);
+            // check we have enough funds
+            if (amount <= 0)
+                return WalletError.InsufficientFunds;
             // create tx template with destination as first output
             var tx = Transaction.Create(GetNetwork());
             var money = new Money((ulong)amount);
@@ -397,6 +403,7 @@ namespace xchwallet
             // create list of candidate coins to spend based on UTXOs from the selected tags
             var candidates = new List<Tuple<WalletAddr, Coin>>();
             var utxos = GetClient().GetUTXOs(pubkey);
+            //TODO: GetAddresses(tags)
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
@@ -411,6 +418,9 @@ namespace xchwallet
                 foreach (var utxo in utxos.Confirmed.UTXOs)
                 {
                     if (minConfs > 0 && utxo.Confirmations < minConfs)
+                        continue;
+                    // check is not spent but unconfirmed
+                    if (utxos.Unconfirmed.SpentOutpoints.Any(so => so.Hash == utxo.Outpoint.Hash))
                         continue;
                     var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                     var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();

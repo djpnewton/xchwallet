@@ -535,17 +535,19 @@ namespace xchwallet
         public BigInteger AmountRecieved(int minConfs=0)
         {
             BigInteger amount = 0;
-            foreach (var o in TxOutputs)
-                if (minConfs <= 0 || o.ChainTx.Confirmations >= minConfs)
-                    amount += o.Amount;
+            if (TxOutputs != null)
+                foreach (var o in TxOutputs)
+                    if (minConfs <= 0 || o.ChainTx.Confirmations >= minConfs)
+                        amount += o.Amount;
             return amount;
         }
 
         public BigInteger AmountSent()
         {
             BigInteger amount = 0;
-            foreach (var i in TxInputs)
-                amount += i.Amount;
+            if (TxInputs != null)
+                foreach (var i in TxInputs)
+                    amount += i.Amount;
             return amount;
         }
 
