@@ -57,14 +57,10 @@ namespace test
         class BalanceOptions : MinConfOptions
         {
             [Option('t', "tags", Required = true, HelpText = "The tags to get the total balance of")]
-            public string Tags { get; set; }  
-        }
+            public string Tags { get; set; }
 
-        [Verb("balance_exclude", HelpText = "Show total balance of wallet all tags excluding one specified")]
-        class BalanceExcludeOptions : MinConfOptions
-        {
-            [Option('t', "tagexclude", Required = true, HelpText = "The tag to exclude")]
-            public string TagExclude { get; set; } 
+            [Option('a', "allExcluding", Default = false, HelpText = "All excluding the tags specified")]
+            public bool AllExcluding { get; set; }
         }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
@@ -124,16 +120,9 @@ namespace test
 
             [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
             public string TagTo { get; set; }
-        }
 
-        [Verb("consolidate_exclude", HelpText = "Consolidate funds from all tags except the one specified")]
-        class ConsolidateExcludeOptions : MinConfOptions
-        { 
-            [Option('t', "tagExclude", Required = true, HelpText = "Wallet tag to exclude")]
-            public string TagExclude { get; set; }
-
-            [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
-            public string TagTo { get; set; }
+            [Option('a', "allExcluding", Default = false, HelpText = "All excluding the tags specified")]
+            public bool AllExcluding { get; set; }
         }
 
         [Verb("showunack", HelpText = "Show unacknowledged transactions")]
@@ -153,13 +142,8 @@ namespace test
         [Verb("delete_tx", HelpText = "Delete wallet transaction")]
         class DeleteTxOptions : CommonOptions
         { 
-            [Option('t', "txid", Required = true, HelpText = "TxId of transaction to delete")]
+            [Option('t', "txid", Required = true, HelpText = "TxId of transaction to delete, or 'ALL' to delete all transactions")]
             public string TxId { get; set; }
-        }
-
-        [Verb("delete_txs_all", HelpText = "Delete *all* wallet transactions")]
-        class DeleteTxsOptions : CommonOptions
-        {
         }
 
         static ILogger _logger = null;
@@ -364,20 +348,11 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
-            var tagList = opts.Tags.Split(',')
+            IEnumerable<string> tagList = opts.Tags.Split(',')
                 .Select(m => { return m.Trim(); })
-                .ToList();
-            var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
-            Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
-            return 0;
-        }
-
-        static int RunBalanceExclude(BalanceExcludeOptions opts)
-        {
-            var wallet = OpenWallet(opts);
-            if (wallet == null)
-                return 1;
-            var tagList = wallet.GetTags().Where(t => t.Tag != opts.TagExclude).Select(t => t.Tag);
+                .ToArray();
+            if (opts.AllExcluding)
+                tagList = wallet.GetTags().Where(t => tagList.Any(t2 => t2 != t.Tag)).Select(t => t.Tag);
             var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
             Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             return 0;
@@ -498,30 +473,13 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
-            var tagList = opts.Tags.Split(',')
+            IEnumerable<string> tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
+            if (opts.AllExcluding)
+                tagList = wallet.GetTags().Where(t => tagList.Any(t2 => t2 != t.Tag)).Select(t => t.Tag);
             EnsureTagExists(wallet, opts.TagTo);
             var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations);
-            Console.WriteLine(res);
-            foreach (var wtx in wtxs)
-                Console.WriteLine(wtx.ChainTx.TxId);
-            wallet.Save();
-            return 0;
-        }
-
-        static int RunConsolidateExclude(ConsolidateExcludeOptions opts)
-        {
-            var wallet = OpenWallet(opts);
-            if (wallet == null)
-                return 1;
-            var feeUnit = new BigInteger(0);
-            var feeMax = new BigInteger(0);
-            setFees(wallet, ref feeUnit, ref feeMax);
-            var tagList = wallet.GetTags().Where(t => t.Tag != opts.TagExclude).Select(t => t.Tag);
-            IEnumerable<WalletTx> wtxs;
-            EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out wtxs, opts.MinimumConfirmations);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
@@ -557,33 +515,25 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
-            wallet.DeleteTransaction(opts.TxId);
-            wallet.Save();
-            return 0;
-        }
-
-        static int RunDeleteTxs(DeleteTxsOptions opts)
-        {
-            var wallet = OpenWallet(opts);
-            if (wallet == null)
-                return 1;
-            foreach (var tag in wallet.GetTags())
-                foreach (var tx in wallet.GetTransactions(tag.Tag))
-                    wallet.DeleteTransaction(tx.ChainTx.TxId);
+            if (opts.TxId == "ALL")
+                foreach (var tag in wallet.GetTags())
+                    foreach (var tx in wallet.GetTransactions(tag.Tag))
+                        wallet.DeleteTransaction(tx.ChainTx.TxId);
+            else
+                wallet.DeleteTransaction(opts.TxId);
             wallet.Save();
             return 0;
         }
 
         static int Main(string[] args)
         {
-            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, BalanceExcludeOptions, NewAddrOptions,
+            return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ConsolidateExcludeOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions, DeleteTxsOptions>(args)
+                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
                 (BalanceOptions opts) => RunBalance(opts),
-                (BalanceExcludeOptions opts) => RunBalanceExclude(opts),
                 (NewAddrOptions opts) => RunNewAddr(opts),
                 (PendingSpendOptions opts) => RunPendingSpend(opts),
                 (ShowPendingOptions opts) => RunShowPending(opts),
@@ -591,11 +541,9 @@ namespace test
                 (CancelPendingOptions opts) => RunCancelPending(opts),
                 (SpendOptions opts) => RunSpend(opts),
                 (ConsolidateOptions opts) => RunConsolidate(opts),
-                (ConsolidateExcludeOptions opts) => RunConsolidateExclude(opts),
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
                 (DeleteTxOptions opts) => RunDeleteTx(opts),
-                (DeleteTxsOptions opts) => RunDeleteTxs(opts),
                 errs => 1);
         }
     }
