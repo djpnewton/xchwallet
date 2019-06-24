@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using DictionaryObject = System.Collections.Generic.Dictionary<string, object>;
 
 namespace WavesCS
@@ -23,7 +24,7 @@ namespace WavesCS
             var node = new Node(tx.GetChar("chainId"));
             Asset = node.GetAsset(tx.GetString("assetId"));
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
-            MinimalFeeInAssets = Asset.LongToAmount(tx.GetLong("minSponsoredAssetFee"));
+            MinimalFeeInAssets = tx["minSponsoredAssetFee"] != null ? Asset.LongToAmount(tx.GetLong("minSponsoredAssetFee")) : 0;
         }
 
         public override byte[] GetBody()
@@ -43,9 +44,18 @@ namespace WavesCS
             }
         }
 
-        public override byte[] GetIdBytes()
+        public override byte[] GetBytes()
         {
-            return GetBody();
+            var stream = new MemoryStream();
+            var writer = new BinaryWriter(stream);
+
+            writer.WriteByte(0);
+            writer.WriteByte((byte)TransactionType.SponsoredFee);
+            writer.WriteByte(Version);
+            writer.Write(GetBody());
+            writer.Write(GetProofsBytes());
+
+            return stream.ToArray();
         }
 
         protected override bool SupportsProofs()
@@ -60,7 +70,7 @@ namespace WavesCS
                 {"type", (byte) TransactionType.SponsoredFee},
                 {"version", Version},
                 {"senderPublicKey", Base58.Encode(SenderPublicKey)},
-               
+
                 {"assetId", Asset.IdOrNull},
                 {"fee", Assets.WAVES.AmountToLong(Fee)},
                 {"timestamp", Timestamp.ToLong()},

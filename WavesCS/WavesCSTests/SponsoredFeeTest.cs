@@ -31,23 +31,23 @@ namespace WavesCSTests
             {
                 asset = node.IssueAsset(Accounts.Alice, "testAsset", "asset for c# issue testing", 2, 6, true);
                 Assert.IsNotNull(asset);
-
-                Thread.Sleep(15000);
+                node.WaitTransactionConfirmation(asset.Id);
             }
 
             var minimalFeeInAssets = 0.0001m;
-            string transaction = node.SponsoredFeeForAsset(Accounts.Alice, asset, minimalFeeInAssets);
-            Assert.IsNotNull(transaction);
-
-            Thread.Sleep(10000);
+            string response = node.SponsoredFeeForAsset(Accounts.Alice, asset, minimalFeeInAssets);
+            Assert.IsNotNull(response);
+            node.WaitTransactionConfirmationByResponse(response);
 
             var amount = 0.2m;
-            var transactionId = node.Transfer(Accounts.Alice, Accounts.Bob.Address, asset, amount, 0.0001m, asset).ParseJsonObject().GetString("id");
-            Thread.Sleep(10000);
+
+            response = node.Transfer(Accounts.Alice, Accounts.Bob.Address, asset, amount, 0.0001m, asset);
+            node.WaitTransactionConfirmationByResponse(response);
+
+            var transactionId = response.ParseJsonObject().GetString("id");
             var txInfo = node.GetObject("transactions/info/{0}", transactionId);
-            
             Assert.AreEqual(asset.Id, txInfo["assetId"]);
             Assert.AreEqual(asset.Id, txInfo["feeAssetId"]);
-        }
+        }     
     }
 }

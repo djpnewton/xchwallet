@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using DictionaryObject = System.Collections.Generic.Dictionary<string, object>;
 
 namespace WavesCS
@@ -17,7 +18,7 @@ namespace WavesCS
 
         public SetScriptTransaction(DictionaryObject tx) : base(tx)
         {
-            Script = tx.GetString("script").FromBase64();
+            Script = tx.ContainsKey("script") && tx.GetString("script") != null ? tx.GetString("script").FromBase64() : null;
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
             ChainId = tx.GetChar("chainId");
         }
@@ -49,9 +50,16 @@ namespace WavesCS
             }
         }
 
-        public override byte[] GetIdBytes()
+        public override byte[] GetBytes()
         {
-            return GetBody();
+            var stream = new MemoryStream();
+            var writer = new BinaryWriter(stream);
+
+            writer.WriteByte(0);
+            writer.Write(GetBody());
+            writer.Write(GetProofsBytes());
+
+            return stream.ToArray();
         }
 
         public override DictionaryObject GetJson()

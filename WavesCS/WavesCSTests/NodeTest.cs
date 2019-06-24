@@ -44,7 +44,15 @@ namespace WavesCSTests
             Assert.AreEqual(200000, asset.AmountToLong(0.002m));
             Assert.AreEqual(0.03m, asset.LongToAmount(3000000));
         }
-        
+
+        [TestMethod]
+        public void TestGetTransactionHeight()
+        {
+            var node = new Node(Node.MainNetChainId);
+            var height = node.GetTransactionHeight("5CZV9RouJs7uaRkZY741WDy9zV69npX1FTZqxo5fsryL");
+            Assert.AreEqual(height, 1371063);
+        }
+
         [TestMethod]
         public void TestAssetBalances()
         {
@@ -93,7 +101,8 @@ namespace WavesCSTests
 
             // transfer back so that Alice's balance is not drained
             var transferTxId = node.Transfer(Accounts.Bob, Accounts.Alice.Address, Assets.WAVES, 0.2m, "Thanks, Alice").ParseJsonObject().GetString("id");
-            Thread.Sleep(10000);
+            node.WaitTransactionConfirmation(transferTxId);
+
             var fee = node.CalculateFee(node.GetTransactionById(transferTxId));
             Assert.IsNotNull(fee);            
         }
@@ -133,6 +142,40 @@ namespace WavesCSTests
             
             var result = node.BatchBroadcast(transactons);
             Assert.IsNotNull(result);
+        }
+
+        [TestMethod]
+        public void TestGetTransactionsFromTimestamp()
+        {
+            var node = new Node();
+            var address = "3NAqFmMtm2msHcnFDCLFJRn3MbfFwGM3ZHo";
+            var timestamp = node.GetBlockTransactionsAtHeight(node.GetHeight() - 5).Last().Timestamp.ToLong();
+            var packageSize = 2;
+            var txs = node.GetTransactionsByAddressAfterTimestamp(address, timestamp, packageSize);
+            bool test = false;
+            foreach (var tx in txs.Reverse().Take(packageSize))
+            {
+                if (tx.Timestamp.ToLong() <= timestamp)
+                {
+                    test = true;
+                    break;
+                }
+            }
+            Assert.IsTrue(test);
+            Assert.IsNotNull(txs);
+        }
+
+        [TestMethod]
+        public void TestGetTransactionsByAddressAfterId()
+        {
+            var node = new Node();
+            var address = "3NAqFmMtm2msHcnFDCLFJRn3MbfFwGM3ZHo";
+            var txId = "13v6hDYxkGgR3NWwTzC75UhK3kEdT4KHuH51qnBMz88Z";
+            var count = 10;
+            
+            var result = node.GetTransactionsByAddressAfterId(address, txId, count);
+            Assert.IsTrue(result.Length == count);
+            Assert.IsNotNull(result.Select(tx => tx.GenerateId() == txId));
         }
     }
 }

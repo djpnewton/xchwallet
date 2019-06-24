@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace WavesCS
 {
@@ -10,12 +11,18 @@ namespace WavesCS
             n = System.Net.IPAddress.HostToNetworkOrder(n);
             writer.Write(n);            
         }
-        
-        public static void WriteByte(this BinaryWriter writer, byte n)
-        {            
+
+        public static void WriteInt(this BinaryWriter writer, int n)
+        {
+            n = System.Net.IPAddress.HostToNetworkOrder(n);
             writer.Write(n);
         }
-        
+
+        public static void WriteByte(this BinaryWriter writer, byte n)
+        {
+            writer.Write(n);
+        }
+
         public static void Write(this BinaryWriter writer, TransactionType n)
         {            
             writer.Write((byte) n);
@@ -23,9 +30,76 @@ namespace WavesCS
 
         public static void WriteShort(this BinaryWriter writer, int n)
         {
-            byte[] shortN = BitConverter.GetBytes((short) n);
+            byte[] shortN = BitConverter.GetBytes((short)n);
             Array.Reverse(shortN);
-            writer.Write(shortN);          
+            writer.Write(shortN);
+        }
+
+        public static void WriteObject(this BinaryWriter writer, object o)
+        {
+            const byte INTEGER = 0;
+            const byte BOOLEAN = 1;
+            const byte BINARY = 2;
+            const byte STRING = 3;
+
+            switch (o)
+            {
+                case long value:
+                    writer.Write(INTEGER);
+                    writer.WriteLong(value);
+                    break;
+                case bool value:
+                    writer.Write(BOOLEAN);
+                    writer.Write(value ? (byte)1 : (byte)0);
+                    break;
+                case byte[] value:
+                    writer.Write(BINARY);
+                    writer.WriteShort((short)value.Length);
+                    writer.Write(value);
+                    break;
+                case string value:
+                    writer.Write(STRING);
+                    var encoded = Encoding.UTF8.GetBytes(value);
+                    writer.WriteShort((short)encoded.Length);
+                    writer.Write(encoded);
+                    break;
+                default:
+                    throw new ArgumentException("Only long, bool and byte[] entry values supported");
+            }
+        }
+
+        public static void WriteEvaluatedExpression(this BinaryWriter writer, object o)
+        {
+            const byte E_LONG = 0;
+            const byte E_BYTES = 1;
+            const byte E_STRING = 2;
+
+            const byte E_TRUE = 6;
+            const byte E_FALSE = 7;
+
+            switch (o)
+            {
+                case long value:
+                    writer.Write(E_LONG);
+                    writer.WriteLong(value);
+                    break;
+                case bool value:
+                    writer.WriteByte(value ? E_TRUE : E_FALSE);
+                    break;
+                case byte[] value:
+                    writer.Write(E_BYTES);
+                    writer.WriteInt(value.Length);
+                    writer.Write(value);
+                    break;
+                case string value:
+                    writer.Write(E_STRING);
+                    var encoded = Encoding.UTF8.GetBytes(value);
+                    writer.WriteInt(encoded.Length);
+                    writer.Write(encoded);
+                    break;
+                default:
+                    throw new ArgumentException("Only long, bool and byte[] entry values supported");
+            }
         }
 
         public static long CurrentTimestamp()
@@ -63,6 +137,6 @@ namespace WavesCS
                 var decoded = Base58.Decode(assetId);
                 stream.Write(decoded, 0, decoded.Length);
             }
-        }  
+        }
     }
 }

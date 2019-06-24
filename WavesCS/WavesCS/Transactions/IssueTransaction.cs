@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 using DictionaryObject = System.Collections.Generic.Dictionary<string, object>;
 
@@ -19,7 +20,7 @@ namespace WavesCS
         public bool Scripted { get; }
 
         public IssueTransaction(byte[] senderPublicKey,
-            string name, string description, decimal quantity, byte decimals, bool reissuable, char chainId, decimal fee = 1m, byte[] script = null, bool scripted = false) : base(chainId, senderPublicKey)
+            string name, string description, decimal quantity, byte decimals, bool reissuable, char chainId, decimal fee = 1m, byte[] script = null) : base(chainId, senderPublicKey)
         {
             Name = name ?? "";
             Description = description ?? "";
@@ -27,9 +28,9 @@ namespace WavesCS
             Decimals = decimals;
             Reissuable = reissuable;
             Fee = fee;
-            Asset = new Asset("", "", Decimals, script);
+            Asset = new Asset("", Name, Decimals, script);
             Script = script;
-            Scripted = scripted;
+            Scripted = script != null;
         }
 
         public IssueTransaction(DictionaryObject tx): base(tx)
@@ -41,40 +42,10 @@ namespace WavesCS
             Quantity = Assets.WAVES.LongToAmount(tx.GetLong("quantity"));
             Reissuable = tx.GetBool("reissuable");
             Fee = Assets.WAVES.LongToAmount(tx.GetLong("fee"));
-            Asset = node.GetAsset(tx.GetString("assetId"));
+            Asset = tx.ContainsKey("assetId") ? node.GetAsset(tx.GetString("assetId")) : null;
             Script = tx.ContainsKey("script") && tx.GetString("script") != null ? tx.GetString("script").FromBase64() : null;
             Scripted = tx.ContainsKey("scripted") ? tx.GetBool("scripted") : false;
-
         }
-
-        public void WriteType(BinaryWriter writer)
-        {
-            writer.Write(TransactionType.Transfer);
-        }
-
-        public void WriteVersion(BinaryWriter writer)
-        {
-            if (Version > 1)
-                writer.Write(Version);
-        }
-
-
-        public void WriteBytes(BinaryWriter writer)
-        {
-            var asset = new Asset("", "", Decimals);
-
-            writer.Write(SenderPublicKey);
-            writer.WriteShort(Name.Length);
-            writer.Write(Encoding.ASCII.GetBytes(Name));
-            writer.WriteShort(Description.Length);
-            writer.Write(Encoding.ASCII.GetBytes(Description));
-            writer.WriteLong(asset.AmountToLong(Quantity));
-            writer.Write(Decimals);
-            writer.Write((byte)(Reissuable ? 1 : 0));
-            writer.WriteLong(Assets.WAVES.AmountToLong(Fee));
-            writer.WriteLong(Timestamp.ToLong());
-        }
-
 
         public override byte[] GetBody()
         {
@@ -84,11 +55,20 @@ namespace WavesCS
             writer.Write(TransactionType.Issue);
 
             if (Version > 1) {
-                writer.Write(Version);
-                writer.Write((byte)ChainId);
+                writer.WriteByte(Version);
+                writer.WriteByte((byte)ChainId);
             }
 
-            WriteBytes(writer);
+            writer.Write(SenderPublicKey);
+            writer.WriteShort(Name.Length);
+            writer.Write(Encoding.ASCII.GetBytes(Name));
+            writer.WriteShort(Description.Length);
+            writer.Write(Encoding.ASCII.GetBytes(Description));
+            writer.WriteLong(new Asset("", "", Decimals).AmountToLong(Quantity));
+            writer.Write(Decimals);
+            writer.Write((byte)(Reissuable ? 1 : 0));
+            writer.WriteLong(Assets.WAVES.AmountToLong(Fee));
+            writer.WriteLong(Timestamp.ToLong());
 
             if (Version > 1)
             {
@@ -105,18 +85,26 @@ namespace WavesCS
             return stream.ToArray();
         }
 
-        public override byte[] GetIdBytes()
+        public override byte[] GetBytes()
         {
-            var asset = new Asset("", "", Decimals);
             var stream = new MemoryStream();
             var writer = new BinaryWriter(stream);
 
-            writer.Write(TransactionType.Issue);
-            WriteBytes(writer);
+            if (Version == 1)
+            {
+                writer.WriteByte((byte)TransactionType.Issue);
+                writer.Write(Proofs[0]);
+                writer.Write(GetBody());
+            }
+            else
+            {
+                writer.WriteByte(0);
+                writer.Write(GetBody());
+                writer.Write(GetProofsBytes());
+            }
 
             return stream.ToArray();
         }
-
 
         public override DictionaryObject GetJson()
         {

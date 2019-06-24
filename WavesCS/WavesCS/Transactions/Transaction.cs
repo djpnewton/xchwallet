@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using DictionaryObject = System.Collections.Generic.Dictionary<string, object>;
 
 namespace WavesCS
 {
-    public abstract class Transaction
+    public abstract class Transaction 
     {
         public DateTime Timestamp { get; set; }
 
@@ -16,9 +19,10 @@ namespace WavesCS
 
         public virtual byte Version { get; set; }
 
-        public abstract byte[] GetBody();
-        public abstract byte[] GetIdBytes();
+        public abstract byte[] GetBytes();
         public abstract DictionaryObject GetJson();
+        public abstract byte[] GetBody();
+        protected abstract bool SupportsProofs();
 
         public byte[][] Proofs { get; }
 
@@ -56,8 +60,11 @@ namespace WavesCS
 
             Height = tx.ContainsKey("height") ? tx.GetLong("height") : 0;
         }
-        
-        protected abstract bool SupportsProofs();
+
+        internal virtual byte[] GetBytesForId()
+        {
+            return GetBody();
+        }
 
         public DictionaryObject GetJsonWithSignature()
         {
@@ -66,6 +73,7 @@ namespace WavesCS
                 .Take(Array.FindLastIndex(Proofs, p => p != null && p.Length > 0) + 1)
                 .Select(p => p == null ? "" : p.ToBase58())
                 .ToArray();
+
             if (SupportsProofs())
             {                
                 json.Add("proofs", proofs);
@@ -79,6 +87,12 @@ namespace WavesCS
                 json.Add("signature", proofs.Single());
             }
             return json;
+        }
+
+        public static Transaction FromJson(char chainId, DictionaryObject tx)
+        {
+            tx["chainId"] = chainId;
+            return FromJson(tx);
         }
 
         public static Transaction FromJson(DictionaryObject tx)
@@ -98,11 +112,37 @@ namespace WavesCS
                 case TransactionType.Transfer: return new TransferTransaction(tx);
                 case TransactionType.Exchange: return new ExchangeTransaction(tx);
                 case TransactionType.SetAssetScript: return new SetAssetScriptTransaction(tx);
+                case TransactionType.InvokeScript: return new InvokeScriptTransaction(tx);
 
                 default: return new UnknownTransaction(tx);
             }
         }
+
+        public byte[] GetProofsBytes()
+        {
+            var stream = new MemoryStream();
+            var writer = new BinaryWriter(stream);
+
+            writer.WriteByte(1);
+
+            var proofs = Proofs
+                .Take(Array.FindLastIndex(Proofs, p => p != null && p.Length > 0) + 1)
+                .Select(p => p ?? (new byte[0]))
+                .ToArray();
+
+            writer.WriteShort(proofs.Count());
+
+            foreach(var proof in proofs)
+            {
+                writer.WriteShort(proof.Length);
+                if (proof.Length > 0)
+                    writer.Write(proof);
+            }
+
+            return stream.ToArray();
+        }
     }
+
 
     public static class TransactionExtensons
     {
@@ -112,16 +152,15 @@ namespace WavesCS
             return transaction;
         }
 
-        public static string GenerateId<T>(this T transaction) where T : Transaction
-        {
-            var bodyBytes = transaction.GetIdBytes();
-            return AddressEncoding.FastHash(bodyBytes, 0, bodyBytes.Length).ToBase58();
-        }
-
         public static byte[] GenerateBinaryId<T>(this T transaction) where T : Transaction
         {
-            var bodyBytes = transaction.GetIdBytes();
-            return AddressEncoding.FastHash(bodyBytes, 0, bodyBytes.Length);
+            var txBytesForId = transaction.GetBytesForId();
+            return AddressEncoding.FastHash(txBytesForId, 0, txBytesForId.Length);
+        }
+
+        public static string GenerateId<T>(this T transaction) where T : Transaction
+        {
+            return transaction.GenerateBinaryId().ToBase58();
         }
     }
 }
