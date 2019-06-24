@@ -80,10 +80,83 @@ namespace xchwallet
             return;
         }
 
+        ChainTx AddUpdateChainTx(string id, long date, long confs, long height, BigInteger fee, byte[] attachment, ref bool sufficientTxsQueried)
+        {
+            // add/update chain tx
+            var ctx = db.ChainTxGet(id);
+            if (ctx == null)
+            {
+                ctx = new ChainTx(id, date, fee, height, confs);
+                db.ChainTxs.Add(ctx);
+            }
+            else
+            {
+                ctx.Height = height;
+                ctx.Confirmations = confs;
+                db.ChainTxs.Update(ctx);
+                // if we are replacing txs already in our wallet we have queried sufficent txs for this account
+                sufficientTxsQueried = true;
+            }
+            if (ctx.Attachment == null && attachment != null && attachment.Length > 0)
+            {
+                var att = new ChainAttachment(ctx, attachment);
+                db.ChainAttachments.Add(att);
+            }
+            return ctx;
+        }
+
+        void AddOutputInputAndWalletTx(WalletAddr address, ChainTx ctx, uint nOut, string sender, string recipient, BigInteger amount)
+        {
+            // add output
+            var o = db.TxOutputGet(ctx.TxId, nOut);
+            if (o == null)
+            {
+                o = new TxOutput(ctx.TxId, recipient, nOut, amount);
+                o.ChainTx = ctx;
+                if (recipient == address.Address)
+                    o.WalletAddr = address;
+                db.TxOutputs.Add(o);
+            }
+            else if (o.WalletAddr == null && o.Addr == address.Address)
+            {
+                logger.LogInformation($"Updating output with no address: {ctx.TxId}, {o.N}, {address.Address}");
+                o.WalletAddr = address;
+                db.TxOutputs.Update(o);
+            }
+            // add input (so we can see who its from)
+            var i = db.TxInputGet(ctx.TxId, nOut);
+            if (i == null)
+            {
+                i = new TxInput(ctx.TxId, sender, nOut, amount);
+                i.ChainTx = ctx;
+                db.TxInputs.Add(i);
+            }
+            // add / update wallet tx
+            var dir = recipient == address.Address ? WalletDirection.Incomming : WalletDirection.Outgoing;
+            var wtx = db.TxGet(address, ctx, dir);
+            if (wtx == null)
+            {
+                wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, State = WalletTxState.None };
+                db.WalletTxs.Add(wtx);
+            }
+        }
+
+        void AddFeeInput(ChainTx ctx, uint nIn, string sender, BigInteger fee)
+        {
+            // add fee input
+            var i = db.TxInputGet(ctx.TxId, nIn);
+            if (i == null)
+            {
+                i = new TxInput(ctx.TxId, sender, nIn, fee);
+                i.ChainTx = ctx;
+                db.TxInputs.Add(i);
+            }
+        }
+
         void UpdateTxs(WalletAddr address, long blockHeight)
         {
             var sufficientTxsQueried = false;
-            var processedTxs = new Dictionary<string, TransferTransaction>();
+            var processedTxs = new Dictionary<string, Transaction>();
             var limit = 100;
             string after = null;
             while (!sufficientTxsQueried)
@@ -98,78 +171,57 @@ namespace xchwallet
                 foreach (var nodeTx in nodeTxs)
                 {
                     after = nodeTx.GenerateId();
+                    // get common waves tx params
+                    var id = nodeTx.GenerateId();
+                    var date = ((DateTimeOffset)nodeTx.Timestamp).ToUnixTimeSeconds();
+                    var confs = nodeTx.Height > 0 ? (blockHeight - nodeTx.Height) + 1 : 0;
+                    // skip any txs we have already processed
+                    if (processedTxs.ContainsKey(id))
+                        continue;
                     if (nodeTx is TransferTransaction)
                     {
                         var trans = (TransferTransaction)nodeTx;
                         if (trans.Asset.Id == assetId)
                         {
-                            var id = trans.GenerateId();
-                            var date = ((DateTimeOffset)trans.Timestamp).ToUnixTimeSeconds();
-
-                            // skip any txs we have already processed
-                            if (processedTxs.ContainsKey(id))
-                                continue;
-
                             var amount = trans.Asset.AmountToLong(trans.Amount);
                             var fee = trans.FeeAsset.AmountToLong(trans.Fee);
-                            var confs = trans.Height > 0 ? (blockHeight - trans.Height) + 1 : 0;
                             var attachment = trans.Attachment;
 
                             // add/update chain tx
-                            var ctx = db.ChainTxGet(id);
-                            if (ctx == null)
-                            {
-                                ctx = new ChainTx(id, date, fee, trans.Height, confs);
-                                db.ChainTxs.Add(ctx);
-                            }
-                            else
-                            {
-                                ctx.Height = trans.Height;
-                                ctx.Confirmations = confs;
-                                db.ChainTxs.Update(ctx);
-                                // if we are replacing txs already in our wallet we have queried sufficent txs for this account
-                                sufficientTxsQueried = true;
-                            }
-                            if (ctx.Attachment == null && attachment != null && attachment.Length > 0)
-                            {
-                                var att = new ChainAttachment(ctx, attachment);
-                                db.ChainAttachments.Add(att);
-                            }
-                            // add output
-                            var o = db.TxOutputGet(id, 0);
-                            if (o == null)
-                            {
-                                o = new TxOutput(id, trans.Recipient, 0, amount);
-                                o.ChainTx = ctx;
-                                if (trans.Recipient == address.Address)
-                                    o.WalletAddr = address;
-                                db.TxOutputs.Add(o);
-                            }
-                            else if (o.WalletAddr == null && o.Addr == address.Address)
-                            {
-                                logger.LogInformation($"Updating output with no address: {id}, {o.N}, {address.Address}");
-                                o.WalletAddr = address;
-                                db.TxOutputs.Update(o);
-                            }
-                            // add input (so we can see who its from)
-                            var i = db.TxInputGet(id, 0);
-                            if (i == null)
-                            {
-                                i = new TxInput(id, trans.Sender, 0, amount + fee);
-                                i.ChainTx = ctx;
-                                db.TxInputs.Add(i);
-                            }
-                            // add / update wallet tx
-                            var dir = trans.Recipient == address.Address ? WalletDirection.Incomming : WalletDirection.Outgoing;
-                            var wtx = db.TxGet(address, ctx, dir);
-                            if (wtx == null)
-                            {
-                                wtx = new WalletTx { ChainTx = ctx, Address = address, Direction = dir, State = WalletTxState.None };
-                                db.WalletTxs.Add(wtx);
-                            }
+                            var ctx = AddUpdateChainTx(id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
+                            // add output, input and wallet tx
+                            AddOutputInputAndWalletTx(address, ctx, 0, trans.Sender, trans.Recipient, amount);
+                            // add fee input
+                            AddFeeInput(ctx, 1, trans.Sender, fee);
 
                             // record the transactions we have processed already
                             processedTxs[id] = trans;
+                        }
+                    }
+                    else if (nodeTx is MassTransferTransaction)
+                    {
+                        var massTx = (MassTransferTransaction)nodeTx;
+                        if (massTx.Asset.Id == assetId)
+                        {
+                            var attachment = massTx.Attachment;
+                            var fee = Assets.WAVES.AmountToLong(massTx.Fee);
+
+                            // add/update chain tx
+                            var ctx = AddUpdateChainTx(id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
+                            // process transfers
+                            uint n = 0;
+                            foreach (var trans in massTx.Transfers)
+                            {
+                                var amount = massTx.Asset.AmountToLong(trans.Amount);
+                                // add output, input and wallet tx
+                                AddOutputInputAndWalletTx(address, ctx, n, massTx.Sender, trans.Recipient, amount);
+                                n++;
+                            }
+                            // add fee input
+                            AddFeeInput(ctx, n, massTx.Sender, fee);
+
+                            // record the transactions we have processed already
+                            processedTxs[id] = massTx;
                         }
                     }
                 }
@@ -357,7 +409,11 @@ namespace xchwallet
                     }
                     catch (System.Net.WebException ex)
                     {
-                        logger.LogError("{0}", ex);
+                        logger.LogError(ex, "error broadcasting tx");
+                        var resp = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                        dynamic obj = JsonConvert.DeserializeObject(resp);
+                        if (obj != null)
+                            logger.LogError($"message: {obj.message}");
                         return WalletError.PartialBroadcast;
                     }
                     // add to wallet data
