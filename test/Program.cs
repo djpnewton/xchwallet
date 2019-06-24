@@ -562,7 +562,12 @@ namespace test
             }
             else if (wallet is ZapWallet)
             {
-                throw new ApplicationException("TODO zap");
+                (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendZapFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
+                originalAddr = origAddr_;
+                sentTxids = sentTxIds_;
+                fee = 1;
+                feeUnit = fee;
+                feeMax = fee * 2;
             }
             else if (wallet is WavWallet)
             {

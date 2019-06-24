@@ -148,10 +148,17 @@ namespace test
             return (addrStr, true, sentTxIds);
         }
 
-        public static (string, bool, List<string>) SendWavesFunds(bool mainnet, string privKey, string addr1, string addr2)
+        public static (string, bool, List<string>) SendZapFunds(bool mainnet, string privKey, string addr1, string addr2)
+        {
+            var assetId = "CgUrFtinLXEbJwJVjwwcppk4Vpz1nMmR3H5cQaDcUcfe";
+            if (mainnet)
+                assetId = "9R3iLi4qGLVWKc16Tg98gmRvgg1usGEYd7SgC1W5D6HB";
+            return SendWavesFunds(mainnet, privKey, addr1, addr2, assetId);
+        }
+
+        public static (string, bool, List<string>) SendWavesFunds(bool mainnet, string privKey, string addr1, string addr2, string assetId=null)
         {
             var sentTxIds = new List<string>();
-            Console.WriteLine($"::send waves funds");
             var chainId = Node.TestNetChainId;
             var nodeAddr = "https://testnodes.wavesnodes.com";
             if (mainnet)
@@ -160,26 +167,35 @@ namespace test
                 nodeAddr = "https://nodes.wavesnodes.com/";
             }
             var node = new Node(nodeAddr, chainId);
+            var asset = Assets.WAVES;
+            if (assetId != null)
+                asset = node.GetAsset(assetId);
+            Console.WriteLine($"::send {asset.Name} funds");
             var seed = xchwallet.Utils.ParseHexString(privKey);
             var key = PrivateKeyAccount.CreateFromSeed(seed, chainId, 0);
             var addr = key.Address;
             Console.WriteLine($"  ::privkey: {privKey}");
             Console.WriteLine($"  ::addr:    {addr}");
-            var balance = node.GetBalance(addr, Assets.WAVES);
-            Console.WriteLine($"  ::balance: {balance} waves");
+            var balance = node.GetBalance(addr, asset);
+            Console.WriteLine($"  ::balance: {balance} {asset.Name}");
             if (balance > 0)
             {
                 var fee = 0.001M;
                 var massTxFee = fee + 0.0005M * 2;
-                var amount = (balance - fee - massTxFee) / 3;
-                var tx = new TransferTransaction(chainId, key.PublicKey, addr1, Assets.WAVES, amount, fee);
+                var balanceAfterFees = balance - fee - massTxFee;
+                if (asset != Assets.WAVES)
+                    balanceAfterFees = balance;
+                var amount = balanceAfterFees / 3;
+                amount = Math.Round(amount, asset.Decimals);
+                var remainder = balanceAfterFees - amount * 3;
+                var tx = new TransferTransaction(chainId, key.PublicKey, addr1, asset, amount, fee);
                 tx.Sign(key);
                 var transfers = new List<MassTransferItem>
                 {
-                    new MassTransferItem(addr1, amount),
+                    new MassTransferItem(addr1, amount + remainder),
                     new MassTransferItem(addr2, amount),
                 };
-                var massTx = new MassTransferTransaction(chainId, key.PublicKey, Assets.WAVES, transfers, "Shut up & take my money");
+                var massTx = new MassTransferTransaction(chainId, key.PublicKey, asset, transfers, "Shut up & take my money");
                 System.Diagnostics.Debug.Assert(massTx.Fee == massTxFee);
                 massTx.Sign(key);
                 // send the raw signed transactions and get the txids
