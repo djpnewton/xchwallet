@@ -80,70 +80,104 @@ namespace test
                     Console.WriteLine("  no balance (coinsAmount == 0).. skipping");
                     return (addrStr, false, sentTxIds);
                 }
-                // create transaction
-                var minSatPerByte = 1;
-                var absoluteFee = 100;
-                var transaction = NBitcoin.Transaction.Create(network);
-                long totalIn = 0;
+                // create and send transactions
+                var numTxs = 6;
+                var maxSendPerTx = coinsAmount / numTxs + 1;
                 while (true)
                 {
-                    // reset transaction
-                    transaction.Inputs.Clear();
-                    transaction.Outputs.Clear();
-                    totalIn = 0;
-                    // add inputs
-                    foreach (var coin in coins)
+                    // create transaction
+                    var minSatPerByte = 1;
+                    var absoluteFee = 100L;
+                    var transaction = NBitcoin.Transaction.Create(network);
+                    var totalIn = 0L;
+                    var totalOut = 0L;
+                    var changeAmount = 0L;
+                    TxOut changeOutput = null;
+                    while (true)
                     {
-                        totalIn += coin.Amount.Satoshi;
-                        transaction.Inputs.Add(new TxIn()
+                        // reset transaction
+                        transaction.Inputs.Clear();
+                        transaction.Outputs.Clear();
+                        totalIn = 0;
+                        totalOut = 0;
+                        changeAmount = 0;
+                        // add inputs
+                        foreach (var coin in coins)
                         {
-                            PrevOut = coin.Outpoint,
-                            ScriptSig = coin.TxOut.ScriptPubKey,
+                            totalIn += coin.Amount.Satoshi;
+                            transaction.Inputs.Add(new TxIn()
+                            {
+                                PrevOut = coin.Outpoint,
+                                ScriptSig = coin.TxOut.ScriptPubKey,
+                            });
+                        }
+                        // add outputs
+                        var outputAmounts = (maxSendPerTx - absoluteFee) / 3;
+                        var outputTargets = new string[] { addr1, addr2, addr1 };
+                        foreach (var target in outputTargets)
+                        {
+                            var targetAddr = BitcoinAddress.Create(target, network);
+                            var txout = new TxOut(new Money(outputAmounts, MoneyUnit.Satoshi), targetAddr);
+                            transaction.Outputs.Add(txout);
+                            totalOut += outputAmounts;
+                        }
+                        // add change output
+                        changeAmount = totalIn - totalOut - absoluteFee;
+                        if (changeAmount > absoluteFee)
+                        {
+                            var txout = new TxOut(new Money(changeAmount, MoneyUnit.Satoshi), addr);
+                            transaction.Outputs.Add(txout);
+                            totalOut += changeAmount;
+                            changeOutput = txout;
+                        }
+                        else
+                            absoluteFee += changeAmount;
+                        // add OPRETURN output
+                        var message = "Long live NBitcoin and its makers!";
+                        var bytes = System.Text.Encoding.UTF8.GetBytes(message);
+                        transaction.Outputs.Add(new TxOut()
+                        {
+                            Value = Money.Zero,
+                            ScriptPubKey = TxNullDataTemplate.Instance.GenerateScriptPubKey(bytes)
                         });
+                        // check totalOut
+                        System.Diagnostics.Debug.Assert(totalOut >= totalIn - absoluteFee);
+                        // sign transaction
+                        transaction.Sign(secret, coins.ToArray());
+                        // check fee rate
+                        if (transaction.GetFeeRate(coins.ToArray()).SatoshiPerByte >= minSatPerByte)
+                            break;
+                        // increment absolute fee
+                        absoluteFee += 100;
                     }
-                    // add outputs
-                    var outputAmounts = (totalIn - absoluteFee) / 3;
-                    var outputTargets = new string[] { addr1, addr2, addr1 };
-                    foreach (var target in outputTargets)
+                    //Console.WriteLine(transaction);
+                    // print total in, fee rate and size
+                    Console.WriteLine($"    ::total in  - {totalIn}");
+                    Console.WriteLine($"    ::total out - {totalOut}");
+                    Console.WriteLine($"    ::change    - {changeAmount}");
+                    var feeRate = transaction.GetFeeRate(coins.ToArray());
+                    var size = transaction.GetSerializedSize();
+                    var vsize = transaction.GetVirtualSize();
+                    Console.WriteLine($"    ::feerate - {feeRate.SatoshiPerByte} sats/byte\n    ::size    - {size} bytes\n    ::vsize   - {vsize} bytes");
+                    // broadcast transaction
+                    Console.WriteLine($"    ::broadcast tx - {transaction.GetHash()}");
+                    var txhex = transaction.ToHex();
+                    resp = Utils.SmartBtcComAuPushTx(mainnet, txhex);
+                    if (resp.StatusCode != System.Net.HttpStatusCode.OK)
                     {
-                        var targetAddr = BitcoinAddress.Create(target, network);
-                        var txout = new TxOut(new Money(outputAmounts, MoneyUnit.Satoshi), targetAddr);
-                        transaction.Outputs.Add(txout);
+                        Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                        Console.WriteLine($"    {resp.Content}");
+                        return (addrStr, false, sentTxIds);
                     }
-                    var message = "Long live NBitcoin and its makers!";
-                    var bytes = System.Text.Encoding.UTF8.GetBytes(message);
-                    transaction.Outputs.Add(new TxOut()
-                    {
-                        Value = Money.Zero,
-                        ScriptPubKey = TxNullDataTemplate.Instance.GenerateScriptPubKey(bytes)
-                    });
-                    // sign transaction
-                    transaction.Sign(secret, coins.ToArray());
-                    // check fee rate
-                    if (transaction.GetFeeRate(coins.ToArray()).SatoshiPerByte >= minSatPerByte)
+                    Console.WriteLine($"    {resp.Content}");
+                    sentTxIds.Add(transaction.GetHash().ToString());
+                    // exit if we have run out of change
+                    if (changeAmount == 0 || changeOutput == null)
                         break;
-                    // increment absolute fee
-                    absoluteFee += 100;
+                    // update coins list
+                    coins.Clear();
+                    coins.Add(new Coin(transaction, changeOutput));
                 }
-                //Console.WriteLine(transaction);
-                // print total in, fee rate and size
-                Console.WriteLine($"  ::total in - {totalIn}");
-                var feeRate = transaction.GetFeeRate(coins.ToArray());
-                var size = transaction.GetSerializedSize();
-                var vsize = transaction.GetVirtualSize();
-                Console.WriteLine($"  ::feerate - {feeRate.SatoshiPerByte} sats/byte\n  ::size    - {size} bytes\n  ::vsize   - {vsize} bytes");
-                // broadcast transaction
-                Console.WriteLine($"  ::broadcast tx - {transaction.GetHash()}");
-                var txhex = transaction.ToHex();
-                resp = Utils.SmartBtcComAuPushTx(mainnet, txhex);
-                if (resp.StatusCode != System.Net.HttpStatusCode.OK)
-                {
-                    Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
-                    Console.WriteLine($"  {resp.Content}");
-                    return (addrStr, false, sentTxIds);
-                }
-                Console.WriteLine($"  {resp.Content}");
-                sentTxIds.Add(transaction.GetHash().ToString());
             }
             return (addrStr, true, sentTxIds);
         }
@@ -177,19 +211,30 @@ namespace test
             Console.WriteLine($"  ::privkey: {privKey}");
             Console.WriteLine($"  ::addr:    {addr}");
             var balance = node.GetBalance(addr, asset);
-            Console.WriteLine($"  ::balance: {balance} {asset.Name}");
+            Console.WriteLine($"  ::balance:        {balance} {asset.Name}");
             if (balance > 0)
             {
-                var fee = 0.001M;
-                var massTxFee = fee + 0.0005M * 2;
-                var balanceAfterFees = balance - fee - massTxFee;
-                if (asset != Assets.WAVES)
+                var numTxs = 6;
+                var txFee = 0.001M;
+                var massTxFee = txFee + 0.0005M * 2;
+                var feeTotal = txFee * (numTxs - 2) + massTxFee;
+                var balanceAfterFees = balance - feeTotal;
+                if (!asset.Equals(Assets.WAVES)) // if the asset is not waves then we ignore the fees because we are paying fees in WAVES
                     balanceAfterFees = balance;
-                var amount = balanceAfterFees / 3;
+                Console.WriteLine($"  ::fees:           {feeTotal} {asset.Name}");
+                Console.WriteLine($"  ::balance - fees: {balanceAfterFees} {asset.Name}");
+                var amount = balanceAfterFees / numTxs;
                 amount = Math.Round(amount, asset.Decimals);
-                var remainder = balanceAfterFees - amount * 3;
-                var tx = new TransferTransaction(chainId, key.PublicKey, addr1, asset, amount, fee);
-                tx.Sign(key);
+                var remainder = balanceAfterFees - amount * numTxs;
+                Console.WriteLine($"  ::amount per tx:  {amount} (x {numTxs} = {amount * numTxs}, remainder: {remainder})");
+                var txs = new List<TransferTransaction>();
+                for (var i = 0; i < numTxs-2; i++)
+                {
+                    var tx = new TransferTransaction(chainId, key.PublicKey, addr1, asset, amount, txFee);
+                    tx.Sign(key);
+                    txs.Add(tx);
+                    System.Threading.Thread.Sleep(100); // sleep to ensure new timestamp
+                }
                 var transfers = new List<MassTransferItem>
                 {
                     new MassTransferItem(addr1, amount + remainder),
@@ -201,16 +246,25 @@ namespace test
                 // send the raw signed transactions and get the txids
                 try
                 {
-                    var output = node.BroadcastAndWait(tx);
-                    Console.WriteLine($"  {output}");
-                    sentTxIds.Add(tx.GenerateId());
+                    string output = null;
+                    foreach (var tx in txs)
+                    {
+                        output = node.BroadcastAndWait(tx);
+                        Console.WriteLine($"  {output}");
+                        sentTxIds.Add(tx.GenerateId());
+                    }
                     output = node.BroadcastAndWait(massTx);
                     Console.WriteLine($"  {output}");
-                    sentTxIds.Add(tx.GenerateId());
+                    sentTxIds.Add(massTx.GenerateId());
                 }
                 catch (System.Net.WebException ex)
                 {
-                    Console.WriteLine($"  ERROR: {ex}");
+                    var resp = new System.IO.StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                    dynamic obj = JsonConvert.DeserializeObject(resp);
+                    if (obj != null)
+                        Console.WriteLine($"  ERROR: {obj.message}");
+                    else
+                        Console.WriteLine($"  ERROR: {ex}");
                     return (addr, false, sentTxIds);
                 }
             }

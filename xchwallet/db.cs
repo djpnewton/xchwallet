@@ -419,12 +419,16 @@ namespace xchwallet
 
         public string InputsAddrs()
         {
-            return string.Join(",", TxInputs.Select(i => i.Addr).Distinct());
+            if (TxInputs != null)
+                return string.Join(",", TxInputs.Select(i => i.Addr).Distinct());
+            return "";
         }
 
         public string OutputsAddrs()
         {
-            return string.Join(",", TxOutputs.Select(o => o.Addr).Distinct());
+            if (TxOutputs != null)
+                return string.Join(",", TxOutputs.Select(o => o.Addr).Distinct());
+            return "";
         }
 
         public BigInteger AmountInputs(string addr=null)

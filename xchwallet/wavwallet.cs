@@ -368,8 +368,12 @@ namespace xchwallet
                 }
                 catch (System.Net.WebException ex)
                 {
-                    logger.LogError("{0}", ex);
-                    return WalletError.FailedBroadcast;
+                    logger.LogError(ex, "error broadcasting tx");
+                    var resp = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                    dynamic obj = JsonConvert.DeserializeObject(resp);
+                    if (obj != null)
+                        logger.LogError($"message: {obj.message}");
+                    return WalletError.PartialBroadcast;
                 }
                 // add to wallet data
                 var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, tagOnBehalfOf);
