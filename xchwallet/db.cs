@@ -187,6 +187,8 @@ namespace xchwallet
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
         public DbSet<WalletPendingSpend> WalletPendingSpends { get; set; }
+        public DbSet<TxOutputForTag> TxOutputsForTag { get; set; }
+        public DbSet<PendingSpendForTag> PendingSpendsForTag { get; set; }
 
         public int LastPathIndex
         {
@@ -236,8 +238,20 @@ namespace xchwallet
                 .HasConversion(bigIntConverter);
 
             builder.Entity<ChainAttachment>()
-                .HasIndex(t => t.ChainTxId)
+                .HasIndex(a => a.ChainTxId)
                 .IsUnique();
+
+            builder.Entity<TxOutputForTag>()
+                .HasIndex(to => to.TxOutputId)
+                .IsUnique();
+            builder.Entity<TxOutputForTag>()
+                .HasKey(to => new { to.TxOutputId, to.TagId });
+
+            builder.Entity<PendingSpendForTag>()
+                .HasIndex(ps => ps.PendingSpendId)
+                .IsUnique();
+            builder.Entity<PendingSpendForTag>()
+                .HasKey(ps => new { ps.PendingSpendId, ps.TagId });
         }
 
         public WalletTag TagGet(string tag)
@@ -372,6 +386,8 @@ namespace xchwallet
 
     public class TxOutput : TxOutputBase
     {
+        public virtual WalletTag TagFor { get; set; }
+
         public TxOutput() : base()
         { }
         public TxOutput(string txid, string addr, uint n, BigInteger amount) : base(txid, addr, n, amount)
@@ -579,9 +595,6 @@ namespace xchwallet
         public WalletDirection Direction { get; set; }
         public WalletTxState State { get; set; }
 
-        public int? TagOnBehalfOfId { get; set; }
-        public virtual WalletTag TagOnBehalfOf { get; set; }
-
         public string InputsAddrs()
         {
             return string.Join(",", ChainTx.TxInputs.Where(i => i.WalletAddrId == WalletAddrId).Select(i => i.Addr).Distinct());
@@ -618,7 +631,7 @@ namespace xchwallet
 
         public override string ToString()
         {
-            return $"<{ChainTx} {Address} {Direction} {State} {TagOnBehalfOf}>";
+            return $"<{ChainTx} {Address} {Direction} {State}>";
         }
     }
 
@@ -632,6 +645,8 @@ namespace xchwallet
         public int TagChangeId { get; set; }
         public virtual WalletTag TagChange { get; set; }
 
+        public virtual WalletTag TagFor { get; set; }
+
         public long Date { get; set; }
         public string SpendCode { get; set; }
         public PendingSpendState State { get; set; }
@@ -641,15 +656,34 @@ namespace xchwallet
         [Column(TypeName = "varchar(255)")]
         public BigInteger Amount { get; set; }
 
-        public int? TagOnBehalfOfId { get; set; }
-        public virtual WalletTag TagOnBehalfOf { get; set; }
-
         public string TxIds { get; set; }
         
         public override string ToString()
         {
-            return $"<{SpendCode} {Date} {To} {Amount} {State} {Tag} {TagChange} {TxIds}>";
+            return $"<{SpendCode} {Date} {To} {Amount} {State} {Tag} {TagChange} {TagFor} {TxIds}>";
         }
+    }
+
+    public class TxOutputForTag
+    {
+        public int Id { get; set; }
+
+        public int TxOutputId { get; set; }
+        public virtual TxOutput TxOutput { get; set; }
+
+        public int TagId { get; set; }
+        public virtual WalletTag Tag { get; set; }
+    }
+
+    public class PendingSpendForTag
+    {
+        public int Id { get; set; }
+
+        public int PendingSpendId { get; set; }
+        public virtual WalletPendingSpend PendingSpend { get; set; }
+
+        public int TagId { get; set; }
+        public virtual WalletTag Tag { get; set; }
     }
 
     public class FiatWalletContext : BaseContext

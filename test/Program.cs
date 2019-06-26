@@ -79,6 +79,9 @@ namespace test
 
             [Option('a', "amount", Required = true, HelpText = "Amount in satoshis")]
             public ulong Amount { get; set; }
+
+            [Option('f', "for", Required = false, HelpText = "Wallet tag to spend on behalf of")]
+            public string For { get; set; }
         }
 
         [Verb("pendingspend", HelpText = "Create pending spend")]
@@ -91,6 +94,9 @@ namespace test
         { 
             [Option('t', "tag", Required = true, HelpText = "Wallet tag to spend from")]
             public string Tag { get; set; }
+
+            [Option('a', "allstates", Required = false, HelpText = "Show spending spends in all states (even completed)")]
+            public bool AllStates { get; set; }
         }
 
         [Verb("actionpending", HelpText = "Action a pending spend")]
@@ -401,7 +407,8 @@ namespace test
             if (wallet == null)
                 return 1;
             EnsureTagExists(wallet, opts.Tag);
-            var spend = wallet.RegisterPendingSpend(opts.Tag, opts.Tag, opts.To, opts.Amount);
+            var tagFor = opts.For != null ? wallet.GetTag(opts.For) : null;
+            var spend = wallet.RegisterPendingSpend(opts.Tag, opts.Tag, opts.To, opts.Amount, tagFor);
             Console.WriteLine(spend);
             wallet.Save();
             return 0;
@@ -412,7 +419,10 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
-            var spends = wallet.PendingSpendsGet(opts.Tag, new PendingSpendState[] { PendingSpendState.Pending, PendingSpendState.Error });
+            var states = new PendingSpendState[] { PendingSpendState.Pending, PendingSpendState.Error };
+            if (opts.AllStates)
+                states = null;
+            var spends = wallet.PendingSpendsGet(opts.Tag, states);
             foreach (var spend in spends)
                 Console.WriteLine(spend);
             return 0;
@@ -453,7 +463,8 @@ namespace test
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
             EnsureTagExists(wallet, opts.Tag);
-            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs);
+            var tagFor = opts.For != null ? wallet.GetTag(opts.For) : null;
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, tagFor);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);

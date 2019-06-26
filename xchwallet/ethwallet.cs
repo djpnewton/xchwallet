@@ -176,11 +176,6 @@ namespace xchwallet
             }
         }
 
-        public override IEnumerable<WalletTx> GetTransactions(string tag)
-        {
-            return db.TxsGet(tag);
-        }
-
         public override IEnumerable<WalletTx> GetAddrTransactions(string address)
         {
             var addr = db.AddrGet(address);
@@ -273,7 +268,7 @@ namespace xchwallet
             return WalletError.Success;
         }
 
-        WalletTx AddOutgoingTx(string from, string signedTx, WalletTag tagOnBehalfOf)
+        WalletTx AddOutgoingTx(string from, string signedTx, WalletTag tagFor)
         {
             var address = db.AddrGet(from);
             var tx = new Transaction(signedTx.HexToByteArray());
@@ -293,14 +288,15 @@ namespace xchwallet
             var o = new TxOutput(tx.Hash.ToHex(true), tx.ReceiveAddress.ToHex(true), 0, amount);
             o.ChainTx = ctx;
             db.TxOutputs.Add(o);
+            if (tagFor != null)
+                db.TxOutputsForTag.Add(new TxOutputForTag { TxOutput = o, Tag = tagFor });
             // create wallet tx
             var wtx = new WalletTx{ChainTx=ctx, Address=address, Direction=WalletDirection.Outgoing};
-            wtx.TagOnBehalfOf = tagOnBehalfOf;
             db.WalletTxs.Add(wtx);
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null)
         {
             wtxs = new List<WalletTx>();
             // get gas price
@@ -322,7 +318,7 @@ namespace xchwallet
                     sendTxTask.Wait();
                     var txid = sendTxTask.Result;
                     // add to wallet data
-                    var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, tagOnBehalfOf);
+                    var wtx = AddOutgoingTx(signedSpendTx.Item1, signedSpendTx.Item2, tagFor);
                     ((List<WalletTx>)wtxs).Add(wtx);
                 }
                 catch (Exception ex)

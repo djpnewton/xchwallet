@@ -95,34 +95,32 @@ namespace xchwallet
         LedgerModel GetLedgerModel();
         WalletTag GetTag(string tag);
         IEnumerable<WalletTag> GetTags();
+        IEnumerable<WalletTag> GetTagsFor(WalletTx wtx);
         bool HasTag(string tag);
         WalletTag NewTag(string tag);
         WalletAddr NewAddress(string tag);
         WalletAddr NewOrUnusedAddress(string tag);
         WalletAddr NewOrExistingAddress(string tag);
         void UpdateFromBlockchain(IDbContextTransaction dbtx);
-        IEnumerable<WalletAddr> GetAddresses(string tag);
-        IEnumerable<WalletAddr> GetAddresses();
-        IEnumerable<WalletTx> GetTransactions(string tag);
+        IEnumerable<WalletAddr> GetAddresses(string tag = null);
+        IEnumerable<WalletTx> GetTransactions(string tag, string tagFor = null);
         IEnumerable<WalletTx> GetAddrTransactions(string address);
         IEnumerable<ChainTx> GetChainTxs();
         void DeleteTransaction(string txid);
         BigInteger GetBalance(string tag, int minConfs=0);
         BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
         BigInteger GetAddrBalance(string address, int minConfs=0);
-        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagOnBehalfOf=null);
+        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor=null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs);
         void PendingSpendCancel(string spendCode);
-        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null);
+        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor=null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
-        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null);
+        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void SeenTransaction(WalletTx tx);
         void AcknowledgeTransactions(IEnumerable<WalletTx> txs);
-        void SetTagOnBehalfOf(WalletTx wtx, WalletTag tagOnBehalfOf);
-        void SetTagOnBehalfOf(WalletPendingSpend spend, WalletTag tagOnBehalfOf);
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
         BigInteger StringToAmount(string value);
@@ -137,7 +135,6 @@ namespace xchwallet
         public abstract LedgerModel LedgerModel { get; }
         public abstract WalletAddr NewAddress(string tag);
         public abstract void UpdateFromBlockchain(IDbContextTransaction dbtx);
-        public abstract IEnumerable<WalletTx> GetTransactions(string tag);
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag, int minConfs=0);
         public abstract BigInteger GetAddrBalance(string address, int minConfs=0);
@@ -228,6 +225,11 @@ namespace xchwallet
             return db.WalletTags;
         }
 
+        public IEnumerable<WalletTag> GetTagsFor(WalletTx wtx)
+        {
+            return db.TxOutputsForTag.Where(oft => wtx.ChainTx.TxOutputs.Any(to => to.Id == oft.TxOutputId)).Select(oft => oft.Tag).Distinct();
+        }
+
         public bool HasTag(string tag)
         {
             return db.WalletTags.Any(t => t.Tag == tag);
@@ -258,19 +260,25 @@ namespace xchwallet
             return NewAddress(tag);
         }
 
-        public IEnumerable<WalletAddr> GetAddresses(string tag)
+        public IEnumerable<WalletAddr> GetAddresses(string tag = null)
         {
-            return db.AddrsGet(tag);
-        }
-
-        public IEnumerable<WalletAddr> GetAddresses()
-        {
-            return db.WalletAddrs;
+            return tag != null ? db.AddrsGet(tag) : db.WalletAddrs;
         }
 
         public IEnumerable<ChainTx> GetChainTxs()
         {
             return db.ChainTxs;
+        }
+
+        public IEnumerable<WalletTx> GetTransactions(string tag, string tagFor = null)
+        {
+            var tagFor_ = tagFor != null ? GetTag(tagFor) : null;
+            if (tagFor_ != null)
+            {
+                var outputsForTag = db.TxOutputsForTag.Where(oft => oft.TagId == tagFor_.Id);
+                return db.TxsGet(tag).Where(tx => tx.ChainTx.TxOutputs.Any(to => outputsForTag.Any(oft => oft.TxOutputId == to.Id)));
+            }
+            return db.TxsGet(tag);
         }
 
         public void DeleteTransaction(string txid)
@@ -291,7 +299,7 @@ namespace xchwallet
             return addr.Balance(minConfs);
         }
 
-        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagOnBehalfOf=null)
+        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor=null)
         {
             if (!ValidateAddress(to))
                 return null;
@@ -304,8 +312,10 @@ namespace xchwallet
             Util.WalletAssert(tagChange_ != null, $"Tag '{tagChange}' does not exist");
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var spend = new WalletPendingSpend{ SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
-            spend.TagOnBehalfOf = tagOnBehalfOf;
+            spend.TagFor = tagFor;
             db.WalletPendingSpends.Add(spend);
+            if (tagFor != null)
+                db.PendingSpendsForTag.Add(new PendingSpendForTag { PendingSpend = spend, Tag = tagFor });
             return spend;
         }
 
@@ -315,7 +325,7 @@ namespace xchwallet
             Util.WalletAssert(spend != null, $"SpendCode '{spendCode}' does not exist");
             Util.WalletAssert(spend.State == PendingSpendState.Pending || spend.State == PendingSpendState.Error, "PendingSpend has wrong state to action");
             logger.LogDebug($"Actioning pending spend: {spendCode}, from tag: {spend.Tag.Tag}, to: {spend.To}, amount: {spend.Amount}");
-            var err = Spend(spend.Tag.Tag, spend.TagChange.Tag, spend.To, spend.Amount, feeMax, feeUnit, out wtxs, spend.TagOnBehalfOf);
+            var err = Spend(spend.Tag.Tag, spend.TagChange.Tag, spend.To, spend.Amount, feeMax, feeUnit, out wtxs, spend.TagFor);
             if (err == WalletError.Success)
             {
                 spend.State = PendingSpendState.Complete;
@@ -340,7 +350,7 @@ namespace xchwallet
             db.WalletPendingSpends.Update(spend);
         }
 
-        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null)
+        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor=null)
         {
             if (tag != null)
             {
@@ -350,6 +360,9 @@ namespace xchwallet
                 var q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id);
                 if (states != null)
                     q = db.WalletPendingSpends.Where(s => s.TagId == tag_.Id && states.Contains(s.State));
+                var tagFor_ = tagFor != null ? db.TagGet(tagFor) : null;
+                if (tagFor_ != null)
+                    q = q.Where(s => s.TagFor == tagFor_);
                 return q;
             }
             else
@@ -392,18 +405,6 @@ namespace xchwallet
                 tx.State = WalletTxState.Ack;
             }
             db.WalletTxs.UpdateRange(txs);
-        }
-
-        public void SetTagOnBehalfOf(WalletTx wtx, WalletTag tagOnBehalfOf)
-        {
-            wtx.TagOnBehalfOf = tagOnBehalfOf;
-            db.WalletTxs.Update(wtx);
-        }
-
-        public void SetTagOnBehalfOf(WalletPendingSpend spend, WalletTag tagOnBehalfOf)
-        {
-            spend.TagOnBehalfOf = tagOnBehalfOf;
-            db.WalletPendingSpends.Update(spend);
         }
 
         public IDbContextTransaction BeginDbTransaction()
