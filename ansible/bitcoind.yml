@@ -5,8 +5,8 @@
   become_user: root
 
   vars:
-    version_without_build: 0.17.0
-    version: "{{version_without_build}}.1"
+    version_without_build: 0.18.0
+    version: "{{version_without_build}}"
     bitcoinfile: bitcoin-{{version}}-x86_64-linux-gnu.tar.gz
   tasks:
     - name: bitcoind group
