@@ -216,9 +216,13 @@ namespace xchwallet
                 .IsUnique();
 
             builder.Entity<TxOutput>()
+                .HasAlternateKey(t => new { t.TxId, t.N });
+            builder.Entity<TxOutput>()
                 .Property(t => t.Amount)
                 .HasConversion(bigIntConverter);
 
+            builder.Entity<TxInput>()
+                .HasAlternateKey(t => new { t.TxId, t.N });
             builder.Entity<TxInput>()
                 .Property(t => t.Amount)
                 .HasConversion(bigIntConverter);
@@ -666,8 +670,6 @@ namespace xchwallet
 
     public class TxOutputForTag
     {
-        public int Id { get; set; }
-
         public int TxOutputId { get; set; }
         public virtual TxOutput TxOutput { get; set; }
 
@@ -677,8 +679,6 @@ namespace xchwallet
 
     public class PendingSpendForTag
     {
-        public int Id { get; set; }
-
         public int PendingSpendId { get; set; }
         public virtual WalletPendingSpend PendingSpend { get; set; }
 
