@@ -46,6 +46,8 @@
   when: deploy_type != "local"
 - import_playbook: logwatch.yml
   when: deploy_type != "local"
+- import_playbook: postfix.yml
+  when: deploy_type != "local"
 #- import_playbook: geth.yml
 - import_playbook: bitcoind.yml
 #- import_playbook: gethtxscan.yml

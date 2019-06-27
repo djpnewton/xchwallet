@@ -1,0 +1,39 @@
+---
+- name: postfix
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: Set Postfix option type as internet site
+      debconf: name=postfix question="postfix/main_mailer_type" value="'Internet Site'" vtype="string"
+
+    - name: Set Postfix option hostname
+      debconf: name=postifx question="postfix/mailname" value="{{smtp_host}}" vtype="string"
+
+    - name: Install Postfix
+      apt:
+        name: ['postfix', 'mailutils']
+
+    - name: set relay host
+      shell: postconf -e relayhost={{smtp_relay_host}}
+
+    - name: set alias maps
+      shell: postconf -e alias_maps=hash:/etc/aliases
+
+    - name: set alias database
+      shell: postconf -e alias_database=hash:/etc/aliases
+
+    - name: Copy aliases config
+      template: src=templates/aliases.j2 dest=/etc/aliases
+
+    - name: rebuild aliases
+      shell: newaliases
+      notify:
+        - restart postfix
+
+  handlers:
+
+    - name: restart postfix
+      service: name=postfix state=restarted
