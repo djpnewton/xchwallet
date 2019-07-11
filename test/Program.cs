@@ -24,7 +24,7 @@ namespace test
 
         class MinConfOptions : CommonOptions
         {
-            [Option('c', "confirmations", Default = 0, HelpText = "Minimum number of confirmations (default: 0)")]
+            [Option('c', "confirmations", Default = 0, HelpText = "Minimum number of confirmations")]
             public int MinimumConfirmations { get; set; } 
         }
 
@@ -50,6 +50,9 @@ namespace test
 
             [Option('u', "update", Default = false, HelpText = "Update from blockchain")]
             public bool Update { get; set; }
+
+            [Option('m', "MaxTxs", Default = 10, HelpText = "Max txs to show per tag")]
+            public int MaxTxs { get; set; }
         }
 
         [Verb("balance", HelpText = "Show total balance of wallet tags")]
@@ -156,6 +159,9 @@ namespace test
         {
             [Option('p', "privateKey", Required = true, HelpText = "Private key to send from (hex)")]
             public string PrivateKey { get; set; }
+
+            [Option('c', "count", Default = 1, HelpText = "Number of times to repeat")]
+            public int Count { get; set; }
         }
 
         static ILogger _logger = null;
@@ -169,7 +175,7 @@ namespace test
             return _logger;
         }
 
-        static void PrintWallet(IWallet wallet, int minConfs)
+        static void PrintWallet(IWallet wallet, int minConfs, int MaxTxs)
         {
             BigInteger totalBalance = 0;
             foreach (var tag in wallet.GetTags())
@@ -181,7 +187,7 @@ namespace test
                 foreach (var addr in addrs)
                     Console.WriteLine($"    {addr.Address}");
                 Console.WriteLine("  txs:");
-                var txs = wallet.GetTransactions(tag.Tag);
+                var txs = wallet.GetTransactions(tag.Tag).OrderByDescending(tx => tx.ChainTx.Date).Take(MaxTxs);
                 foreach (var tx in txs)
                     if (minConfs == 0 || tx.ChainTx.Confirmations >= minConfs)
                     {
@@ -203,6 +209,8 @@ namespace test
                 totalBalance += balance;
             }
             Console.WriteLine($"\n::total balance: {totalBalance} ({wallet.AmountToString(totalBalance)} {wallet.Type()})");
+            Console.WriteLine($"::address count: {wallet.GetAddresses().Count()}");
+            Console.WriteLine($"::chaintx count: {wallet.GetChainTxs().Count()}");
         }
 
         static string GetWalletType(string dbName)
@@ -341,7 +349,7 @@ namespace test
                 wallet.Save();
                 dbtx.Commit();
             }
-            PrintWallet(wallet, opts.MinimumConfirmations);
+            PrintWallet(wallet, opts.MinimumConfirmations, opts.MaxTxs);
             return 0;
         }
 
@@ -556,99 +564,102 @@ namespace test
             wallet.Save();
             Console.WriteLine();
 
-            // send funds to wallet addresses
-            BigInteger fee = 0;
-            BigInteger feeUnit = 0;
-            BigInteger feeMax = 0;
-            List<string> sentTxids = null;
-            string originalAddr = null;
-            if (wallet is BtcWallet)
+            for (var n = 0; n < opts.Count; n++)
             {
-                (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendBtcFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
-                originalAddr = origAddr_;
-                sentTxids = sentTxIds_;
-                fee = 113;
-                feeUnit = 1;
-                feeMax = 10000;
-            }
-            else if (wallet is ZapWallet)
-            {
-                (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendZapFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
-                originalAddr = origAddr_;
-                sentTxids = sentTxIds_;
-                fee = 1;
-                feeUnit = fee;
-                feeMax = fee * 2;
-            }
-            else if (wallet is WavWallet)
-            {
-                (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendWavesFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
-                originalAddr = origAddr_;
-                sentTxids = sentTxIds_;
-                fee = 100000;
-                feeUnit = fee;
-                feeMax = fee * 2;
-            }
-            else if (wallet is EthWallet)
-            {
-                throw new ApplicationException("TODO eth");
-            }
-            if (sentTxids.Count > 0)
-                // sleep for a bit to wait for the tx to propagate
-                foreach (var i in Enumerable.Range(1, 10))
+                // send funds to wallet addresses
+                BigInteger fee = 0;
+                BigInteger feeUnit = 0;
+                BigInteger feeMax = 0;
+                List<string> sentTxids = null;
+                string originalAddr = null;
+                if (wallet is BtcWallet)
                 {
-                    Console.Write(".");
-                    System.Threading.Thread.Sleep(1000);
+                    (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendBtcFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
+                    originalAddr = origAddr_;
+                    sentTxids = sentTxIds_;
+                    fee = 113;
+                    feeUnit = 1;
+                    feeMax = 10000;
                 }
-            Console.WriteLine("\n");
-
-            // consolidate
-            Console.WriteLine("::consolidate");
-            var dbtx = wallet.BeginDbTransaction();
-            wallet.UpdateFromBlockchain(dbtx);
-            wallet.Save();
-            dbtx.Commit();
-            var balance = wallet.GetBalance(new string[] { one, two });
-            if (balance > 0)
-            {
-                var err = wallet.Consolidate(new string[] { one, two }, cons, feeMax, feeUnit, out var wtxs);
-                foreach (var tx in wtxs)
-                    Console.WriteLine($"  - {tx.ChainTx.TxId}");
-                Console.WriteLine($"  {err}");
-                wallet.Save();
-                if (err != WalletError.Success)
-                    return 1;
-                // sleep for a bit to wait for the tx to propagate
-                foreach (var i in Enumerable.Range(1, 10))
+                else if (wallet is ZapWallet)
                 {
-                    Console.Write(".");
-                    System.Threading.Thread.Sleep(1000);
+                    (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendZapFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
+                    originalAddr = origAddr_;
+                    sentTxids = sentTxIds_;
+                    fee = 1;
+                    feeUnit = fee;
+                    feeMax = fee * 2;
                 }
-            }
-            else
-                Console.WriteLine("  no balance.. skipping");
-            Console.WriteLine("\n");
+                else if (wallet is WavWallet)
+                {
+                    (var origAddr_, var withoutErrors, var sentTxIds_) = LoadTest.SendWavesFunds(wallet.IsMainnet(), opts.PrivateKey, wallet.GetAddresses(one).First().Address, wallet.GetAddresses(two).First().Address);
+                    originalAddr = origAddr_;
+                    sentTxids = sentTxIds_;
+                    fee = 100000;
+                    feeUnit = fee;
+                    feeMax = fee * 2;
+                }
+                else if (wallet is EthWallet)
+                {
+                    throw new ApplicationException("TODO eth");
+                }
+                if (sentTxids.Count > 0)
+                    // sleep for a bit to wait for the tx to propagate
+                    foreach (var i in Enumerable.Range(1, 10))
+                    {
+                        Console.Write(".");
+                        System.Threading.Thread.Sleep(1000);
+                    }
+                Console.WriteLine("\n");
 
-            // send to original address
-            Console.WriteLine("::send back to original address");
-            dbtx = wallet.BeginDbTransaction();
-            wallet.UpdateFromBlockchain(dbtx);
-            wallet.Save();
-            dbtx.Commit();
-            balance = wallet.GetBalance(cons);
-            if (balance > 0)
-            {
-                var err = wallet.Spend(cons, cons, originalAddr, balance - fee, feeMax, feeUnit, out var wtxs);
-                foreach (var tx in wtxs)
-                    Console.WriteLine($"  - {tx.ChainTx.TxId}");
-                Console.WriteLine($"  {err}");
+                // consolidate
+                Console.WriteLine("::consolidate");
+                var dbtx = wallet.BeginDbTransaction();
+                wallet.UpdateFromBlockchain(dbtx);
                 wallet.Save();
-                if (err != WalletError.Success)
-                    return 1;
+                dbtx.Commit();
+                var balance = wallet.GetBalance(new string[] { one, two });
+                if (balance > 0)
+                {
+                    var err = wallet.Consolidate(new string[] { one, two }, cons, feeMax, feeUnit, out var wtxs);
+                    foreach (var tx in wtxs)
+                        Console.WriteLine($"  - {tx.ChainTx.TxId}");
+                    Console.WriteLine($"  {err}");
+                    wallet.Save();
+                    if (err != WalletError.Success)
+                        return 1;
+                    // sleep for a bit to wait for the tx to propagate
+                    foreach (var i in Enumerable.Range(1, 10))
+                    {
+                        Console.Write(".");
+                        System.Threading.Thread.Sleep(1000);
+                    }
+                }
+                else
+                    Console.WriteLine("  no balance.. skipping");
+                Console.WriteLine("\n");
+
+                // send to original address
+                Console.WriteLine("::send back to original address");
+                dbtx = wallet.BeginDbTransaction();
+                wallet.UpdateFromBlockchain(dbtx);
+                wallet.Save();
+                dbtx.Commit();
+                balance = wallet.GetBalance(cons);
+                if (balance > 0)
+                {
+                    var err = wallet.Spend(cons, cons, originalAddr, balance - fee, feeMax, feeUnit, out var wtxs);
+                    foreach (var tx in wtxs)
+                        Console.WriteLine($"  - {tx.ChainTx.TxId}");
+                    Console.WriteLine($"  {err}");
+                    wallet.Save();
+                    if (err != WalletError.Success)
+                        return 1;
+                }
+                else
+                    Console.WriteLine("  no balance.. skipping");
+                Console.WriteLine();
             }
-            else
-                Console.WriteLine("  no balance.. skipping");
-            Console.WriteLine();
 
             return 0;
         }

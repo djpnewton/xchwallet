@@ -17,6 +17,7 @@ namespace test
             Console.WriteLine($"::send btc funds");
             var network = Network.TestNet;
             var privKeyBytes = Enumerable.Range(0, privKey.Length / 2).Select(x => Convert.ToByte(privKey.Substring(x * 2, 2), 16)).ToArray();
+            Console.WriteLine($"  privKeyBytes size: {privKeyBytes.Length}");
             var key = new Key(privKeyBytes);
             var secret = key.GetBitcoinSecret(network);
             var addr = secret.PubKey.GetAddress(ScriptPubKeyType.Legacy, network);
