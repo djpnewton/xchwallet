@@ -18,7 +18,7 @@ namespace test
         {
             [Option("showsql", Default = false, HelpText = "Show SQL commands")]
             public bool ShowSql { get; set; }
-            [Option('n', "dbname", Required = true, HelpText = "Wallet database name")]
+            [Option('n', "dbname", Required = true, HelpText = "Wallet database name (prefix with 'conn|' to use a full connection string if you need extra parameters like remote server, username etc)")]
             public string DbName { get; set; }
         }
 
@@ -58,11 +58,8 @@ namespace test
         [Verb("balance", HelpText = "Show total balance of wallet tags")]
         class BalanceOptions : MinConfOptions
         {
-            [Option('t', "tags", Required = true, HelpText = "The tags to get the total balance of")]
+            [Option('t', "tags", HelpText = "The tags to get the total balance of (if omitted all tags are selected)")]
             public string Tags { get; set; }
-
-            [Option('a', "allExcluding", Default = false, HelpText = "All excluding the tags specified")]
-            public bool AllExcluding { get; set; }
         }
 
         [Verb("newaddress", HelpText = "Create a new wallet address")]
@@ -213,9 +210,20 @@ namespace test
             Console.WriteLine($"::chaintx count: {wallet.GetChainTxs().Count()}");
         }
 
+        static WalletContext GetWalletContext(string dbNameOrConnString, bool logToConsole)
+        {
+            if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
+            {
+                var connString = dbNameOrConnString.Substring(5);
+                return BaseContext.CreateMySqlWalletContext<WalletContext>(connString, logToConsole);
+            }
+            else
+                return BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbNameOrConnString, logToConsole);
+        }
+
         static string GetWalletType(string dbName)
         {
-            using (var db = BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbName, false))
+            using (var db = GetWalletContext(dbName, false))
                 return Util.GetWalletType(db);
         }
 
@@ -225,7 +233,7 @@ namespace test
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using db: '{1}'", walletType, dbName);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbName, showSql);
+            var db = GetWalletContext(dbName, showSql);
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
@@ -358,11 +366,11 @@ namespace test
             var wallet = OpenWallet(opts);
             if (wallet == null)
                 return 1;
-            IEnumerable<string> tagList = opts.Tags.Split(',')
-                .Select(m => { return m.Trim(); })
-                .ToArray();
-            if (opts.AllExcluding)
-                tagList = wallet.GetTags().Where(t => tagList.Any(t2 => t2 != t.Tag)).Select(t => t.Tag);
+            IEnumerable<string> tagList;
+            if (opts.Tags != null)
+                tagList = opts.Tags.Split(',');
+            else
+                tagList = wallet.GetTags().Select(t => t.Tag);
             var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
             Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             return 0;
