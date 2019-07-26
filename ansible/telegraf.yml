@@ -8,6 +8,8 @@
     telegraf_install_url: "https://dl.influxdata.com/telegraf/releases/telegraf_1.11.2-1_amd64.deb"
     telegraf_sha256sum: "39ef98f2ae427c480f8f0ca55e941acf061f208f67f1ae73d6e74ea926f819ef"
     telegraf_hostname: "{{ deploy_host }}"
+
+    python_testnet_flag: "{{ '--testnet' if testnet else '' }}"
   tasks:
 
     - name: download telegraf package
@@ -24,6 +26,26 @@
       until: apt_result is success
       retries: 2
       delay: 5
+
+    - name: install pip3
+      apt: name=python3-pip state=present
+
+    - name: install python packages
+      shell: pip3 install requests==2.22.0
+
+    - file: path=/opt/telegraf state=directory
+
+    - name: install bitcoin telegraf script
+      template:
+        src: templates/telegraf_bitcoin.py
+        dest: /opt/telegraf/telegraf_bitcoin.py
+        mode: 0755
+
+    - name: install waves telegraf script
+      template:
+        src: templates/telegraf_waves.py
+        dest: /opt/telegraf/telegraf_waves.py
+        mode: 0755
 
     - name: install telegraf config
       template:
