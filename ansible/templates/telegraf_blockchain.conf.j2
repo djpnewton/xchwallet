@@ -1,0 +1,10 @@
+[[inputs.exec]]
+    commands = ["/opt/telegraf/telegraf_bitcoin.py {{python_testnet_flag}}"]
+    name_prefix = "bitcoin_"
+    data_format = "json"
+    timeout = "10s"
+[[inputs.exec]]
+    commands = ["/opt/telegraf/telegraf_waves.py {{python_testnet_flag}}"]
+    name_prefix = "waves_"
+    data_format = "json"
+    timeout = "10s"
