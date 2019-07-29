@@ -115,7 +115,16 @@ namespace test
 
         [Verb("spend", HelpText = "Spend crypto - send funds from the wallet")]
         class SpendOptions : SpendOptionsBase
-        { }
+        {
+            [Option("replace_txid", HelpText = "Double spend at least one input of this tx (only effects BTC)")]
+            public string ReplaceTxId { get; set; }
+
+            [Option("fee_unit", Default=0, HelpText = "Specify the feeUnit to use")]
+            public long FeeUnit { get; set; }
+
+            [Option("fee_max", Default = 0, HelpText = "Specify the feeMax to use")]
+            public long FeeMax { get; set; }
+        }
 
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
         class ConsolidateOptions : MinConfOptions
@@ -128,6 +137,15 @@ namespace test
 
             [Option('a', "allExcluding", Default = false, HelpText = "All excluding the tags specified")]
             public bool AllExcluding { get; set; }
+
+            [Option("replace_txid", HelpText = "Double spend at least one input of this tx (only effects BTC)")]
+            public string ReplaceTxId { get; set; }
+
+            [Option("fee_unit", Default = 0, HelpText = "Specify the feeUnit to use")]
+            public long FeeUnit { get; set; }
+
+            [Option("fee_max", Default = 0, HelpText = "Specify the feeMax to use")]
+            public long FeeMax { get; set; }
         }
 
         [Verb("showunack", HelpText = "Show unacknowledged transactions")]
@@ -487,9 +505,15 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
+            if (opts.FeeUnit > 0)
+                feeUnit = opts.FeeUnit;
+            if (opts.FeeMax > 0)
+                feeMax = opts.FeeMax;
             EnsureTagExists(wallet, opts.Tag);
             var tagFor = opts.For != null ? wallet.GetTag(opts.For) : null;
-            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, tagFor);
+            var res = wallet.Spend(opts.Tag, opts.Tag, opts.To, opts.Amount, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, tagFor, opts.ReplaceTxId);
+            if (res == WalletError.Success && opts.ReplaceTxId != null)
+                wallet.SetTransactionStatus(opts.ReplaceTxId, ChainTxStatus.DoubleSpent);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);
@@ -505,13 +529,21 @@ namespace test
             var feeUnit = new BigInteger(0);
             var feeMax = new BigInteger(0);
             setFees(wallet, ref feeUnit, ref feeMax);
+            if (opts.FeeUnit > 0)
+                feeUnit = opts.FeeUnit;
+            if (opts.FeeMax > 0)
+                feeMax = opts.FeeMax;
             IEnumerable<string> tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
             if (opts.AllExcluding)
                 tagList = wallet.GetTags().Where(t => tagList.Any(t2 => t2 != t.Tag)).Select(t => t.Tag);
             EnsureTagExists(wallet, opts.TagTo);
-            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations);
+            if (opts.ReplaceTxId != null)
+                wallet.SetTransactionStatus(opts.ReplaceTxId, ChainTxStatus.Ignored);
+            var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations, opts.ReplaceTxId);
+            if (res == WalletError.Success && opts.ReplaceTxId != null)
+                wallet.SetTransactionStatus(opts.ReplaceTxId, ChainTxStatus.DoubleSpent);
             Console.WriteLine(res);
             foreach (var wtx in wtxs)
                 Console.WriteLine(wtx.ChainTx.TxId);

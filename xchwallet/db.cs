@@ -489,7 +489,7 @@ namespace xchwallet
         public bool Invalid()
         {
             var status = Status();
-            return status == ChainTxStatus.DoubleSpent || status == ChainTxStatus.Expired || status == ChainTxStatus.Invalid || status == ChainTxStatus.Forgotten;
+            return status == ChainTxStatus.DoubleSpent || status == ChainTxStatus.Expired || status == ChainTxStatus.Invalid || status == ChainTxStatus.Ignored;
         }
 
         public override string ToString()

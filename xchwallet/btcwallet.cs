@@ -12,6 +12,21 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
+    public class CoinCandidate
+    {
+        public WalletAddr Addr { get; set; }
+        public Coin Coin { get; set; }
+        public UTXO Utxo { get; set; }
+        public bool Confirmed { get; set; }
+        public CoinCandidate(WalletAddr addr, Coin coin, UTXO utxo, bool confirmed)
+        {
+            Addr = addr;
+            Coin = coin;
+            Utxo = utxo;
+            Confirmed = confirmed;
+        }
+    }
+
     public class TxScan
     {
         public string TxId { get; set; }
@@ -130,7 +145,7 @@ namespace xchwallet
             var status = utxo.Confirmations > 0 ? ChainTxStatus.Confirmed : ChainTxStatus.Unconfirmed;
             if (ctx.NetworkStatus == null)
             {
-                var txResult = _client.GetTransaction(utxo.Outpoint.Hash);
+                var txResult = GetClient().GetTransaction(utxo.Outpoint.Hash);
                 var networkStatus= new ChainTxNetworkStatus(ctx, status, 0, txResult.Transaction.ToBytes());
                 db.ChainTxNetworkStatus.Add(networkStatus);
             }
@@ -310,7 +325,89 @@ namespace xchwallet
             return tx.GetFeeRate(coins.ToArray());
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null)
+        Transaction GetTransaction(string txid)
+        {
+            var ctx = db.ChainTxGet(txid);
+            if (ctx == null || ctx.NetworkStatus == null || ctx.NetworkStatus.TxBin == null)
+                return null;
+            var hex = BitConverter.ToString(ctx.NetworkStatus.TxBin).Replace("-", string.Empty);
+            return Transaction.Parse(hex, GetNetwork());
+        }
+
+        WalletError UseReplacedTxCoins(IEnumerable<WalletAddr> addrs, List<CoinCandidate> candidates, string txid, Transaction tx=null)
+        {
+            // we call this function before choosing any other candidate coins so that
+            // the replacement tx is sure to use at least one of them
+
+            if (txid == null && tx == null)
+                return WalletError.Success;
+            // find tx to replace (if not provided by caller)
+            if (tx == null)
+            {
+                tx = GetTransaction(txid);
+                if (tx == null)
+                    return WalletError.NothingToReplace;
+            }
+            // use tx inputs
+            foreach (var input in tx.Inputs)
+            {
+                var txWithOutput = GetTransaction(input.PrevOut.Hash.ToString());
+                if (txWithOutput == null)
+                {
+                    var txResult = GetClient().GetTransaction(input.PrevOut.Hash);
+                    if (txResult != null)
+                        txWithOutput = txResult.Transaction;
+                }
+                if (txWithOutput == null)
+                    continue;
+                var coin = new Coin(input.PrevOut, txWithOutput.Outputs[input.PrevOut.N]);
+                var utxo = new UTXO(coin);
+                var addrStr = coin.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
+                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                if (addr != null)
+                    candidates.Add(new CoinCandidate(addr, coin, null, false));
+            }
+            if (candidates.Count() == 0)
+                return WalletError.UnableToReplace;
+            return WalletError.Success;
+        }
+
+        void UseUtxoCoins(IEnumerable<WalletAddr> addrs, List<CoinCandidate> candidates, UTXOChanges utxos, int minConfs=0)
+        {
+            if (minConfs <= 0)
+                foreach (var utxo in utxos.Unconfirmed.UTXOs)
+                {
+                    var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
+                    var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                    if (addr != null)
+                        candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo, false));
+                }
+            foreach (var utxo in utxos.Confirmed.UTXOs)
+            {
+                if (minConfs > 0 && utxo.Confirmations < minConfs)
+                    continue;
+                // check is not already spent but as yet unconfirmed
+                if (utxos.Unconfirmed.SpentOutpoints.Any(so => so.Hash == utxo.Outpoint.Hash))
+                    continue;
+                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
+                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
+                if (addr != null)
+                    candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo, true));
+            }
+        }
+
+        void CheckCoinsAreInWallet(IEnumerable<CoinCandidate> candidates, int currentHeight)
+        {
+            foreach (var candidate in candidates)
+            {
+                // Coins from double spending (UseReplacedTxCoins) we dont have the uxto for ATM
+                // but we can be sure the uxto has been processed already
+                if (candidate.Utxo != null)
+                    processUtxo(candidate.Utxo, currentHeight, candidate.Confirmed);
+            }
+        }
+
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null, string replaceTxId = null)
         {
             wtxs = new List<WalletTx>();
             var tagChange_ = db.TagGet(tagChange);
@@ -320,37 +417,26 @@ namespace xchwallet
             var money = new Money((ulong)amount);
             var toaddr = BitcoinAddress.Create(to, GetNetwork());
             var output = tx.Outputs.Add(money, toaddr);
-            // create list of candidate coins to spend based on UTXOs from the selected tag
+            // create list of candidate coins to spend based on (a tx we might want to replace and) UTXOs from the selected tag
             var addrs = GetAddresses(tag);
-            var candidates = new List<Tuple<WalletAddr, Coin>>();
+            var candidates = new List<CoinCandidate>();
+            var res = UseReplacedTxCoins(addrs, candidates, replaceTxId);
+            if (res != WalletError.Success)
+                return res;
             var utxos = GetClient().GetUTXOs(pubkey);
-            foreach (var utxo in utxos.Unconfirmed.UTXOs)
-            {
-                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
-                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
-                if (addr != null)
-                    candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-            }
-            foreach (var utxo in utxos.Confirmed.UTXOs)
-            {
-                // check is not spent but unconfirmed
-                if (utxos.Unconfirmed.SpentOutpoints.Any(so => so.Hash == utxo.Outpoint.Hash))
-                    continue;
-                var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
-                var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
-                if (addr != null)
-                    candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-            }
+            UseUtxoCoins(addrs, candidates, utxos);
             // add inputs until we can satisfy our output
             BigInteger totalInput = 0;
             var toBeSpent = new List<Tuple<WalletAddr, Coin, Key>>();
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.Inputs.Add(new TxIn(candidate.Item2.Outpoint));
-                totalInput += candidate.Item2.Amount.Satoshi;
-                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item1.Path)).PrivateKey;
-                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Item1, candidate.Item2, privateKey));
+                var txin = new TxIn(candidate.Coin.Outpoint);
+                txin.Sequence = 0; // RBF: BIP125
+                tx.Inputs.Add(txin);
+                totalInput += candidate.Coin.Amount.Satoshi;
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Addr.Path)).PrivateKey;
+                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Addr, candidate.Coin, privateKey));
                 // check if we have enough inputs
                 if (totalInput >= amount)
                     break;
@@ -377,6 +463,8 @@ namespace xchwallet
             }
             var coins = from a in toBeSpent select a.Item2;
             var keys = from a in toBeSpent select a.Item3;
+            // check coins are represented as incoming wallet txs
+            CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
             // sign inputs (after adding a change output)
             tx.Sign(keys.ToArray(), coins.ToArray());
             // recalculate fee rate and check it is less then the max fee
@@ -399,7 +487,7 @@ namespace xchwallet
             }
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string replaceTxId=null)
         {
             wtxs = new List<WalletTx>();
             // generate new address to send to
@@ -416,33 +504,30 @@ namespace xchwallet
             var money = new Money((ulong)amount);
             var toaddr = BitcoinAddress.Create(to.Address, GetNetwork());
             var output = tx.Outputs.Add(money, toaddr);
-            // create list of candidate coins to spend based on UTXOs from the selected tags
-            var candidates = new List<Tuple<WalletAddr, Coin>>();
+            // create list of candidate coins to spend based on (a tx we might want to replace and) UTXOs from the selected tag
+            var candidates = new List<CoinCandidate>();
+            if (replaceTxId != null)
+            {
+                // if we are replacing a tx we need to replace at least one of its inputs 
+                var replaceTx = GetTransaction(replaceTxId);
+                if (replaceTx == null)
+                    return WalletError.NothingToReplace;
+                var res = WalletError.UnableToReplace;
+                foreach (var tag in tagFrom)
+                {
+                    var addrs = GetAddresses(tag);
+                    if (UseReplacedTxCoins(addrs, candidates, replaceTxId, replaceTx) == WalletError.Success)
+                        res = WalletError.Success;
+                }
+                if (res != WalletError.Success)
+                    return res;
+            }
             var utxos = GetClient().GetUTXOs(pubkey);
             //TODO: GetAddresses(tags)
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
-                if (minConfs <= 0)
-                    foreach (var utxo in utxos.Unconfirmed.UTXOs)
-                    {
-                        var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
-                        var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
-                        if (addr != null)
-                            candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-                    }
-                foreach (var utxo in utxos.Confirmed.UTXOs)
-                {
-                    if (minConfs > 0 && utxo.Confirmations < minConfs)
-                        continue;
-                    // check is not spent but unconfirmed
-                    if (utxos.Unconfirmed.SpentOutpoints.Any(so => so.Hash == utxo.Outpoint.Hash))
-                        continue;
-                    var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
-                    var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
-                    if (addr != null)
-                        candidates.Add(new Tuple<WalletAddr, Coin>(addr, utxo.AsCoin()));
-                }
+                UseUtxoCoins(addrs, candidates, utxos, minConfs);
             }
             // add all inputs so we can satisfy our output
             BigInteger totalInput = 0;
@@ -450,10 +535,12 @@ namespace xchwallet
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
-                tx.Inputs.Add(new TxIn(candidate.Item2.Outpoint));
-                totalInput += candidate.Item2.Amount.Satoshi;
-                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Item1.Path)).PrivateKey;
-                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Item1, candidate.Item2, privateKey));
+                var txin = new TxIn(candidate.Coin.Outpoint);
+                txin.Sequence = 0; // RBF: BIP125
+                tx.Inputs.Add(txin);
+                totalInput += candidate.Coin.Amount.Satoshi;
+                var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Addr.Path)).PrivateKey;
+                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Addr, candidate.Coin, privateKey));
             }
             // check we have enough inputs
             if (totalInput < amount)
@@ -472,6 +559,8 @@ namespace xchwallet
             // sign inputs
             var coins = from a in toBeSpent select a.Item2;
             var keys = from a in toBeSpent select a.Item3;
+            // check coins are represented as incoming wallet txs
+            CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
             tx.Sign(keys.ToArray(), coins.ToArray());
             // recalculate fee rate and check it is less then the max fee
             var fee = tx.GetFee(coins.ToArray());

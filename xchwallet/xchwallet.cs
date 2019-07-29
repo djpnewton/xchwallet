@@ -63,10 +63,10 @@ namespace xchwallet
         Unknown,
         Unconfirmed,
         Confirmed,
-        DoubleSpent, // possible on UTXO based chains and account based chains that use account nonce
-        Expired,     // possible account based chains that use timestamp
-        Invalid,     // violates a rule (maybe tries to spend funds that are already spent)
-        Forgotten,   // we want to ignore this tx for whatever reason (maybe so we can double spend it)
+        DoubleSpent, // possible on UTXO based chains and account based chains that use account nonce     \
+        Expired,     // possible account based chains that use timestamp                                   |  txs with these states are not counted when
+        Invalid,     // violates a rule (maybe tries to spend funds that are already spent)                |  calculating balance (see ChainTx.Invalid())
+        Ignored,     // we want to ignore this tx for whatever reason (maybe so we can double spend it)   /
         
         //!! if you add a new entry make sure to update: ChainTx.Invalid() !!
     }
@@ -88,9 +88,11 @@ namespace xchwallet
         Success,
         MaxFeeBreached,
         InsufficientFunds,
-        FailedBroadcast, // A wallet which can compete an operation with a single transaction might return this error when trying to broadcast it
+        FailedBroadcast,  // A wallet which can compete an operation with a single transaction might return this error when trying to broadcast it
         PartialBroadcast, // A wallet which might require multiple transactions might return this error
         Cancelled,
+        NothingToReplace, // Cannot find the tx to replace
+        UnableToReplace,  // Unable to replace (double spend) a tx
     }
 
     public enum PendingSpendState
@@ -129,8 +131,8 @@ namespace xchwallet
         void PendingSpendCancel(string spendCode);
         IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor=null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
-        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null);
-        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0);
+        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null, string replaceTxId=null);
+        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string ReplaceTxId = null);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void SeenTransaction(WalletTx tx);
@@ -152,8 +154,8 @@ namespace xchwallet
         public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
         public abstract BigInteger GetBalance(string tag, int minConfs=0);
         public abstract BigInteger GetAddrBalance(string address, int minConfs=0);
-        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null);
-        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0);
+        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null, string ReplaceTxId = null);
+        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string ReplaceTxId = null);
         public abstract string AmountToString(BigInteger value);
         public abstract BigInteger StringToAmount(string value);
         public abstract bool ValidateAddress(string address);

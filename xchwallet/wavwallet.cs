@@ -360,7 +360,8 @@ namespace xchwallet
             return wtx;
         }
 
-        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null)
+        public override WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null,
+            string replaceTxId=null/*not applicable to waves*/)
         {
             wtxs = new List<WalletTx>();
             // create spend transaction from accounts
@@ -392,7 +393,8 @@ namespace xchwallet
             return res;
         }
 
-        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0)
+        public override WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0,
+            string replaceTxId = null/*not applicable to waves*/)
         {
             wtxs = new List<WalletTx>();
             var to = NewOrExistingAddress(tagTo);
