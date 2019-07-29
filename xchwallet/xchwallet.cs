@@ -58,6 +58,19 @@ namespace xchwallet
         UTXO
     }
 
+    public enum ChainTxStatus
+    {
+        Unknown,
+        Unconfirmed,
+        Confirmed,
+        DoubleSpent, // possible on UTXO based chains and account based chains that use account nonce
+        Expired,     // possible account based chains that use timestamp
+        Invalid,     // violates a rule (maybe tries to spend funds that are already spent)
+        Forgotten,   // we want to ignore this tx for whatever reason (maybe so we can double spend it)
+        
+        //!! if you add a new entry make sure to update: ChainTx.Invalid() !!
+    }
+
     public enum WalletDirection
     {
         Incomming, Outgoing
@@ -107,6 +120,7 @@ namespace xchwallet
         IEnumerable<WalletTx> GetAddrTransactions(string address);
         IEnumerable<ChainTx> GetChainTxs();
         void DeleteTransaction(string txid);
+        void SetTransactionStatus(string txid, ChainTxStatus status);
         BigInteger GetBalance(string tag, int minConfs=0);
         BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
         BigInteger GetAddrBalance(string address, int minConfs=0);
@@ -284,6 +298,24 @@ namespace xchwallet
         public void DeleteTransaction(string txid)
         {
             db.TxDelete(txid);
+        }
+
+        public void SetTransactionStatus(string txid, ChainTxStatus status)
+        {
+            var ctx = db.ChainTxGet(txid);
+            if (ctx != null)
+            {
+                if (ctx.NetworkStatus != null)
+                {
+                    ctx.NetworkStatus.Status = status;
+                    db.ChainTxNetworkStatus.Update(ctx.NetworkStatus);
+                }
+                else
+                {
+                    ctx.NetworkStatus = new ChainTxNetworkStatus(ctx, status, 0, null);
+                    db.ChainTxNetworkStatus.Add(ctx.NetworkStatus);
+                }
+            }
         }
 
         public BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0)

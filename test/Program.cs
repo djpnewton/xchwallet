@@ -151,6 +151,15 @@ namespace test
             public string TxId { get; set; }
         }
 
+        [Verb("setnetworkstatus", HelpText = "Set the network status of a transaction")]
+        class SetNetworkStatusOptions : CommonOptions
+        {
+            [Option('t', "txid", Required = true, HelpText = "TxId of transaction to set")]
+            public string TxId { get; set; }
+            [Option('s', "status", Required = true, HelpText = "Status to set")]
+            public ChainTxStatus Status { get; set; }
+        }
+
         [Verb("load_test", HelpText = "Wallet load testing")]
         class LoadTestOptions : CommonOptions
         {
@@ -192,13 +201,13 @@ namespace test
                         {
                             var inputs = tx.AmountInputs();
                             var to = tx.ChainTx.OutputsAddrs();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (to {to}) {tx.ChainTx.Fee}");
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, inputs {inputs} (to {to}) {tx.ChainTx.Fee} {tx.ChainTx.Status()}");
                         }
                         else
                         {
                             var outputs = tx.AmountOutputs();
                             var from = tx.ChainTx.InputsAddrs();
-                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (from {from}) {tx.ChainTx.Fee}");
+                            Console.WriteLine($"    {tx.ChainTx.TxId}, {tx.Direction}, outputs {outputs} (from {from}) {tx.ChainTx.Fee} {tx.ChainTx.Status()}");
                         }
                     }
                 var balance = wallet.GetBalance(tag.Tag, minConfs);
@@ -548,6 +557,16 @@ namespace test
             return 0;
         }
 
+        static int RunSetNetworkStatus(SetNetworkStatusOptions opts)
+        {
+            var wallet = OpenWallet(opts);
+            if (wallet == null)
+                return 1;
+            wallet.SetTransactionStatus(opts.TxId, opts.Status);
+            wallet.Save();
+            return 0;
+        }
+
         static int RunLoadTest(LoadTestOptions opts)
         {
             var wallet = OpenWallet(opts);
@@ -676,7 +695,7 @@ namespace test
         {
             return CommandLine.Parser.Default.ParseArguments<NewOptions, ShowOptions, BalanceOptions, NewAddrOptions,
                 PendingSpendOptions, ShowPendingOptions, ActionPendingOptions, CancelPendingOptions,
-                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions, LoadTestOptions>(args)
+                SpendOptions, ConsolidateOptions, ShowUnAckOptions, AckOptions, DeleteTxOptions, SetNetworkStatusOptions, LoadTestOptions>(args)
                 .MapResult(
                 (NewOptions opts) => RunNew(opts),
                 (ShowOptions opts) => RunShow(opts),
@@ -691,6 +710,7 @@ namespace test
                 (ShowUnAckOptions opts) => RunShowUnAck(opts),
                 (AckOptions opts) => RunAck(opts),
                 (DeleteTxOptions opts) => RunDeleteTx(opts),
+                (SetNetworkStatusOptions opts) => RunSetNetworkStatus(opts),
                 (LoadTestOptions opts) => RunLoadTest(opts),
                 errs => 1);
         }

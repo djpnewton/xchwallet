@@ -80,7 +80,7 @@ namespace xchwallet
             return;
         }
 
-        ChainTx AddUpdateChainTx(string id, long date, long confs, long height, BigInteger fee, byte[] attachment, ref bool sufficientTxsQueried)
+        ChainTx AddUpdateChainTx(Transaction trans, string id, long date, long confs, long height, BigInteger fee, byte[] attachment, ref bool sufficientTxsQueried)
         {
             // add/update chain tx
             var ctx = db.ChainTxGet(id);
@@ -96,6 +96,18 @@ namespace xchwallet
                 db.ChainTxs.Update(ctx);
                 // if we are replacing txs already in our wallet we have queried sufficent txs for this account
                 sufficientTxsQueried = true;
+            }
+            var status = confs > 0 ? ChainTxStatus.Confirmed : ChainTxStatus.Unconfirmed;
+            if (ctx.NetworkStatus == null)
+            {
+                var networkStatus = new ChainTxNetworkStatus(ctx, status, 0, trans.GetBytes());
+                db.ChainTxNetworkStatus.Add(networkStatus);
+            }
+            else
+            {
+                // transaction update comes from our trusted node so we will override any status we have set manually
+                ctx.NetworkStatus.Status = status;
+                db.ChainTxNetworkStatus.Update(ctx.NetworkStatus);
             }
             if (ctx.Attachment == null && attachment != null && attachment.Length > 0)
             {
@@ -188,7 +200,7 @@ namespace xchwallet
                             var attachment = trans.Attachment;
 
                             // add/update chain tx
-                            var ctx = AddUpdateChainTx(id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
+                            var ctx = AddUpdateChainTx(trans, id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
                             // add output, input and wallet tx
                             AddOutputInputAndWalletTx(address, ctx, 0, trans.Sender, trans.Recipient, amount);
                             // add fee input
@@ -207,7 +219,7 @@ namespace xchwallet
                             var fee = Assets.WAVES.AmountToLong(massTx.Fee);
 
                             // add/update chain tx
-                            var ctx = AddUpdateChainTx(id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
+                            var ctx = AddUpdateChainTx(massTx, id, date, confs, nodeTx.Height, fee, attachment, ref sufficientTxsQueried);
                             // process transfers
                             uint n = 0;
                             foreach (var trans in massTx.Transfers)
@@ -328,7 +340,9 @@ namespace xchwallet
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             // create chain tx
             var ctx = new ChainTx(signedTx.GenerateId(), date, fee, -1, 0);
+            ctx.NetworkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, signedTx.GetBytes());
             db.ChainTxs.Add(ctx);
+            db.ChainTxNetworkStatus.Add(ctx.NetworkStatus);
             // create tx input
             var i = new TxInput(signedTx.GenerateId(), from /*signedTx.Sender is null*/, 0, amount + fee);
             i.ChainTx = ctx;

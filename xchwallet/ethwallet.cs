@@ -140,7 +140,19 @@ namespace xchwallet
                     ctx.Confirmations = confirmations;
                     db.ChainTxs.Update(ctx);
                 }
-
+                var status = confirmations > 0 ? ChainTxStatus.Confirmed : ChainTxStatus.Unconfirmed;
+                if (ctx.NetworkStatus == null)
+                {
+                    //TODO: we need txdata from scantx, to be able to rebroadcast if necessary
+                    //var networkStatus = new ChainTxNetworkStatus(ctx, status, 0, scantx.txdata/*TODO*/);
+                    //db.ChainTxNetworkStatus.Add(networkStatus);
+                }
+                else
+                {
+                    // transaction update comes from our trusted node so we will override any status we have set manually
+                    ctx.NetworkStatus.Status = status;
+                    db.ChainTxNetworkStatus.Update(ctx.NetworkStatus);
+                }
                 // add output
                 var o = db.TxOutputGet(scantx.txid, 0);
                 if (o == null)
@@ -279,6 +291,8 @@ namespace xchwallet
             // create chain tx
             var ctx = new ChainTx(tx.Hash.ToHex(true), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
+            var networkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, signedTx.HexToByteArray());
+            db.ChainTxNetworkStatus.Add(networkStatus);
             // create tx input
             var i = new TxInput(tx.Hash.ToHex(true), from, 0, amount + fee);
             i.ChainTx = ctx;

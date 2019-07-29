@@ -183,6 +183,7 @@ namespace xchwallet
         public DbSet<TxInput> TxInputs { get; set; }
         public DbSet<ChainTx> ChainTxs { get; set; }
         public DbSet<ChainAttachment> ChainAttachments { get; set; }
+        public DbSet<ChainTxNetworkStatus> ChainTxNetworkStatus { get; set; }
         public DbSet<WalletTag> WalletTags { get; set; }
         public DbSet<WalletAddr> WalletAddrs { get; set; }
         public DbSet<WalletTx> WalletTxs { get; set; }
@@ -243,6 +244,10 @@ namespace xchwallet
 
             builder.Entity<ChainAttachment>()
                 .HasIndex(a => a.ChainTxId)
+                .IsUnique();
+
+            builder.Entity<ChainTxNetworkStatus>()
+                .HasIndex(d => d.ChainTxId)
                 .IsUnique();
 
             builder.Entity<TxOutputForTag>()
@@ -418,6 +423,7 @@ namespace xchwallet
         public long Height { get; set; }
         public long Confirmations { get; set; }
         public virtual ChainAttachment Attachment { get; set; }
+        public virtual ChainTxNetworkStatus NetworkStatus { get; set; }
 
         public ChainTx()
         {
@@ -473,6 +479,19 @@ namespace xchwallet
             return amount;
         }
 
+        public ChainTxStatus Status()
+        {
+            if (NetworkStatus != null)
+                return NetworkStatus.Status;
+            return ChainTxStatus.Unknown;
+        }
+
+        public bool Invalid()
+        {
+            var status = Status();
+            return status == ChainTxStatus.DoubleSpent || status == ChainTxStatus.Expired || status == ChainTxStatus.Invalid || status == ChainTxStatus.Forgotten;
+        }
+
         public override string ToString()
         {
             string att = null;
@@ -505,6 +524,33 @@ namespace xchwallet
         public override string ToString()
         {
             return $"<'{Data}'>";
+        }
+    }
+
+    public class ChainTxNetworkStatus
+    {
+        public int Id { get; set; }
+        public int ChainTxId { get; set; }
+        public virtual ChainTx Tx { get; set; }
+
+        public ChainTxStatus Status { get; set; }
+        public long DateLastBroadcast { get; set; }
+        public byte[] TxBin { get; set; }
+
+        public ChainTxNetworkStatus()
+        {
+            this.Tx = null;
+            this.Status = ChainTxStatus.Unknown;
+            this.DateLastBroadcast = 0;
+            this.TxBin = null;
+        }
+
+        public ChainTxNetworkStatus(ChainTx tx, ChainTxStatus status, long dateLastBroadcast, byte[] txBin)
+        {
+            this.Tx = tx;
+            this.Status = status;
+            this.DateLastBroadcast = dateLastBroadcast;
+            this.TxBin = txBin;
         }
     }
 
@@ -561,8 +607,12 @@ namespace xchwallet
             BigInteger amount = 0;
             if (TxOutputs != null)
                 foreach (var o in TxOutputs)
+                {
+                    if (o.ChainTx.Invalid())
+                        continue;
                     if (minConfs <= 0 || o.ChainTx.Confirmations >= minConfs)
                         amount += o.Amount;
+                }
             return amount;
         }
 
@@ -571,7 +621,11 @@ namespace xchwallet
             BigInteger amount = 0;
             if (TxInputs != null)
                 foreach (var i in TxInputs)
+                {
+                    if (i.ChainTx.Invalid())
+                        continue;
                     amount += i.Amount;
+                }
             return amount;
         }
 

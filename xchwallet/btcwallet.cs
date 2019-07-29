@@ -127,6 +127,19 @@ namespace xchwallet
                 ctx.Confirmations = utxo.Confirmations;
                 db.ChainTxs.Update(ctx);
             }
+            var status = utxo.Confirmations > 0 ? ChainTxStatus.Confirmed : ChainTxStatus.Unconfirmed;
+            if (ctx.NetworkStatus == null)
+            {
+                var txResult = _client.GetTransaction(utxo.Outpoint.Hash);
+                var networkStatus= new ChainTxNetworkStatus(ctx, status, 0, txResult.Transaction.ToBytes());
+                db.ChainTxNetworkStatus.Add(networkStatus);
+            }
+            else
+            {
+                // transaction update comes from our trusted node so we will override any status we have set manually
+                ctx.NetworkStatus.Status = status;
+                db.ChainTxNetworkStatus.Update(ctx.NetworkStatus);
+            }
             // add output
             var o = db.TxOutputGet(id, utxo.Outpoint.N);
             if (o == null)
@@ -182,14 +195,18 @@ namespace xchwallet
                 var ctx = db.ChainTxGet(tx.TransactionId.ToString());
                 if (ctx != null)
                 {
-                    var dirty = false;
                     if (ctx.Confirmations != tx.Confirmations)
                     {
                         ctx.Confirmations = tx.Confirmations;
-                        dirty = true;
-                    }
-                    if (dirty)
                         db.ChainTxs.Update(ctx);
+                        var status = tx.Confirmations > 0 ? ChainTxStatus.Confirmed : ChainTxStatus.Unconfirmed;
+                        if (ctx.NetworkStatus != null && ctx.NetworkStatus.Status != status)
+                        {
+                            // transaction update comes from our trusted node so we will override any status we have set manually
+                            ctx.NetworkStatus.Status = status;
+                            db.ChainTxNetworkStatus.Update(ctx.NetworkStatus);
+                        }
+                    }
                 }
                 else
                     logger.LogError($"No wallet tx found for {tx.TransactionId}");
@@ -247,13 +264,16 @@ namespace xchwallet
             return addr;
         }
 
-        IEnumerable<WalletTx> AddOutgoingTx(string txid, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTag tagFor)
+        IEnumerable<WalletTx> AddOutgoingTx(Transaction tx, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTag tagFor)
         {
+            var txid = tx.GetHash().ToString();
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             // create chain tx
             var ctx = new ChainTx(txid, date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
+            var networkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, tx.ToBytes());
+            db.ChainTxNetworkStatus.Add(networkStatus);
             // create tx inputs
             uint n = 0;
             foreach ((var addr, var coin, var _) in spent)
@@ -368,7 +388,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtxs_ = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to, amount, fee.Satoshi, tagFor);
+                var wtxs_ = AddOutgoingTx(tx, toBeSpent, to, amount, fee.Satoshi, tagFor);
                 ((List<WalletTx>)wtxs).AddRange(wtxs_);
                 return WalletError.Success;
             }
@@ -462,7 +482,7 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtxs_ = AddOutgoingTx(tx.GetHash().ToString(), toBeSpent, to.Address, amount, fee.Satoshi, null);
+                var wtxs_ = AddOutgoingTx(tx, toBeSpent, to.Address, amount, fee.Satoshi, null);
                 ((List<WalletTx>)wtxs).AddRange(wtxs_);
                 return WalletError.Success;
             }
