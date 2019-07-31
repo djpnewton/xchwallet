@@ -17,13 +17,52 @@ namespace xchwallet
         public WalletAddr Addr { get; set; }
         public Coin Coin { get; set; }
         public UTXO Utxo { get; set; }
-        public bool Confirmed { get; set; }
-        public CoinCandidate(WalletAddr addr, Coin coin, UTXO utxo, bool confirmed)
+        public CoinCandidate(WalletAddr addr, Coin coin, UTXO utxo)
         {
             Addr = addr;
             Coin = coin;
             Utxo = utxo;
-            Confirmed = confirmed;
+        }
+    }
+
+    public class CoinSpend
+    {
+        public string From { get; set; }
+        public WalletAddr Addr { get; set; }
+        public Coin Coin { get; set; }
+        public Key Key { get; set; }
+        public CoinSpend(string from, WalletAddr addr, Coin coin, Key key)
+        {
+            From = from;
+            Addr = addr;
+            Coin = coin;
+            Key = key;
+        }
+    }
+
+    public class CoinOutput
+    {
+        public string To { get; set; }
+        public BigInteger Amount { get; set; }
+        public CoinOutput(string to, BigInteger amount)
+        {
+            To = to;
+            Amount = amount;
+        }
+    }
+
+    public class OutgoingTx
+    {
+        public Transaction Tx { get; set; }
+        public List<CoinSpend> Spends { get; set; }
+        public List<CoinOutput> Outputs { get; set; }
+        public BigInteger Fee { get; set; }
+        public OutgoingTx(Transaction tx, List<CoinSpend> spends, List<CoinOutput> outputs, BigInteger fee)
+        {
+            Tx = tx;
+            Spends = spends;
+            Outputs = outputs;
+            Fee = fee;
         }
     }
 
@@ -65,7 +104,7 @@ namespace xchwallet
             return _client;
         }
 
-        Network GetNetwork()
+        public Network GetNetwork()
         {
             return IsMainnet() ? Network.Main : Network.TestNet; 
         }
@@ -109,7 +148,7 @@ namespace xchwallet
 			return pubkey.Derive(path).PubKey.Hash.GetAddress(GetNetwork());
         }
 
-        private void processUtxo(NBXplorer.Models.UTXO utxo, int currentHeight, bool confirmed)
+        private void processUtxo(NBXplorer.Models.UTXO utxo, int currentHeight)
         {
             //TODO - add attachment
             // - read OP_RETURN ?
@@ -118,7 +157,7 @@ namespace xchwallet
             var to = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork());
             var id = utxo.Outpoint.Hash.ToString();
             var date = utxo.Timestamp.ToUnixTimeSeconds();
-            var height = confirmed ? currentHeight - (utxo.Confirmations-1) : -1;
+            var height = utxo.Confirmations > 0 ? currentHeight - (utxo.Confirmations-1) : -1;
 
             logger.LogInformation($"processing UTXO - txid {id} - destination addr {to} - value {utxo.Value}");
 
@@ -193,12 +232,12 @@ namespace xchwallet
             var utxos = GetClient().GetUTXOs(pubkey);
             foreach (var item in utxos.Unconfirmed.UTXOs)
             {
-                processUtxo(item, utxos.CurrentHeight, false);
+                processUtxo(item, utxos.CurrentHeight);
                 db.SaveChanges();
             }
             foreach (var item in utxos.Confirmed.UTXOs)
             {
-                processUtxo(item, utxos.CurrentHeight, true);
+                processUtxo(item, utxos.CurrentHeight);
                 db.SaveChanges();
             }
         }
@@ -279,48 +318,72 @@ namespace xchwallet
             return addr;
         }
 
-        IEnumerable<WalletTx> AddOutgoingTx(Transaction tx, List<Tuple<WalletAddr, Coin, Key>> spent, string to, BigInteger amount, BigInteger fee, WalletTag tagFor)
+        IEnumerable<WalletTx> AddOutgoingTx(Transaction tx, List<CoinSpend> spents, List<CoinOutput> outputs, BigInteger fee, WalletTag tagFor)
         {
             var txid = tx.GetHash().ToString();
-            logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
+            logger.LogDebug("outgoing tx: outputs: {0}, fee: {1}", outputs.Select(o=>o.Amount), fee);
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             // create chain tx
-            var ctx = new ChainTx(txid, date, fee, -1, 0);
-            db.ChainTxs.Add(ctx);
-            var networkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, tx.ToBytes());
-            db.ChainTxNetworkStatus.Add(networkStatus);
+            var ctx = db.ChainTxGet(txid);
+            if (ctx == null)
+            {
+                ctx = new ChainTx(txid, date, fee, -1, 0);
+                db.ChainTxs.Add(ctx);
+            }
+            if (ctx.NetworkStatus == null)
+            {
+                var networkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, tx.ToBytes());
+                db.ChainTxNetworkStatus.Add(networkStatus);
+            }
             // create tx inputs
             uint n = 0;
-            foreach ((var addr, var coin, var _) in spent)
+            foreach (var spent in spents)
             {
-                var i = new TxInput(txid, addr.Address, n, coin.Amount.Satoshi);
-                i.ChainTx = ctx;
-                i.WalletAddr = addr;
-                db.TxInputs.Add(i);
+                if (db.TxInputGet(txid, n) == null)
+                {
+                    var i = new TxInput(txid, spent.From, n, spent.Coin.Amount.Satoshi);
+                    i.ChainTx = ctx;
+                    i.WalletAddr = spent.Addr;
+                    db.TxInputs.Add(i);
+                }
                 n++;
             }
-            // create tx output
-            var o = new TxOutput(txid, to, 0, amount);
-            o.ChainTx = ctx;
-            db.TxOutputs.Add(o);
-            if (tagFor != null)
-                db.TxOutputsForTag.Add(new TxOutputForTag { TxOutput = o, Tag = tagFor });
+            // create tx outputs
+            n = 0;
+            foreach (var output in outputs)
+            {
+                if (db.TxOutputGet(txid, n) == null)
+                {
+                    var o = new TxOutput(txid, output.To, n, output.Amount);
+                    o.ChainTx = ctx;
+                    db.TxOutputs.Add(o);
+                    if (tagFor != null)
+                        db.TxOutputsForTag.Add(new TxOutputForTag { TxOutput = o, Tag = tagFor });
+                }
+                n++;
+            }
             // create wallet txs
             var wtxs = new List<WalletTx>();
-            foreach ((var addr, var coin, var _) in spent)
+            foreach (var spent in spents)
             {
-                var wtx = new WalletTx { ChainTx = ctx, Address = addr, Direction = WalletDirection.Outgoing, State = WalletTxState.None };
-                db.WalletTxs.Add(wtx);
+                if (spent.Addr == null)
+                    continue;
+                var wtx = db.TxGet(spent.Addr, ctx, WalletDirection.Outgoing);
+                if (wtx == null)
+                {
+                    wtx = new WalletTx { ChainTx = ctx, Address = spent.Addr, Direction = WalletDirection.Outgoing, State = WalletTxState.None };
+                    db.WalletTxs.Add(wtx);
+                }
                 wtxs.Add(wtx);
             }
             return wtxs;
         }
 
-        FeeRate GetFeeRate(Transaction tx, List<Tuple<WalletAddr, Coin, Key>> toBeSpent)
+        FeeRate GetFeeRate(Transaction tx, List<CoinSpend> toBeSpent)
         {
             // sign tx before calculating fee so it includes signatures
-            var coins = from a in toBeSpent select a.Item2;
-            var keys = from a in toBeSpent select a.Item3;
+            var coins = from a in toBeSpent select a.Coin;
+            var keys = from a in toBeSpent select a.Key;
             tx.Sign(keys.ToArray(), coins.ToArray());
             return tx.GetFeeRate(coins.ToArray());
         }
@@ -361,11 +424,10 @@ namespace xchwallet
                 if (txWithOutput == null)
                     continue;
                 var coin = new Coin(input.PrevOut, txWithOutput.Outputs[input.PrevOut.N]);
-                var utxo = new UTXO(coin);
                 var addrStr = coin.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                 var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                 if (addr != null)
-                    candidates.Add(new CoinCandidate(addr, coin, null, false));
+                    candidates.Add(new CoinCandidate(addr, coin, null));
             }
             if (candidates.Count() == 0)
                 return WalletError.UnableToReplace;
@@ -380,7 +442,7 @@ namespace xchwallet
                     var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                     var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                     if (addr != null)
-                        candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo, false));
+                        candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo));
                 }
             foreach (var utxo in utxos.Confirmed.UTXOs)
             {
@@ -392,7 +454,7 @@ namespace xchwallet
                 var addrStr = utxo.ScriptPubKey.GetDestinationAddress(GetNetwork()).ToString();
                 var addr = addrs.Where(a => a.Address == addrStr).FirstOrDefault();
                 if (addr != null)
-                    candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo, true));
+                    candidates.Add(new CoinCandidate(addr, utxo.AsCoin(), utxo));
             }
         }
 
@@ -403,7 +465,7 @@ namespace xchwallet
                 // Coins from double spending (UseReplacedTxCoins) we dont have the uxto for ATM
                 // but we can be sure the uxto has been processed already
                 if (candidate.Utxo != null)
-                    processUtxo(candidate.Utxo, currentHeight, candidate.Confirmed);
+                    processUtxo(candidate.Utxo, currentHeight);
             }
         }
 
@@ -427,7 +489,7 @@ namespace xchwallet
             UseUtxoCoins(addrs, candidates, utxos);
             // add inputs until we can satisfy our output
             BigInteger totalInput = 0;
-            var toBeSpent = new List<Tuple<WalletAddr, Coin, Key>>();
+            var toBeSpent = new List<CoinSpend>();
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
@@ -436,7 +498,7 @@ namespace xchwallet
                 tx.Inputs.Add(txin);
                 totalInput += candidate.Coin.Amount.Satoshi;
                 var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Addr.Path)).PrivateKey;
-                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Addr, candidate.Coin, privateKey));
+                toBeSpent.Add(new CoinSpend(candidate.Addr.Address, candidate.Addr, candidate.Coin, privateKey));
                 // check if we have enough inputs
                 if (totalInput >= amount)
                     break;
@@ -461,8 +523,8 @@ namespace xchwallet
                 // add the change output
                 changeOutput = tx.Outputs.Add(currentFee - targetFee, changeAddress);
             }
-            var coins = from a in toBeSpent select a.Item2;
-            var keys = from a in toBeSpent select a.Item3;
+            var coins = from a in toBeSpent select a.Coin;
+            var keys = from a in toBeSpent select a.Key;
             // check coins are represented as incoming wallet txs
             CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
             // sign inputs (after adding a change output)
@@ -476,7 +538,8 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtxs_ = AddOutgoingTx(tx, toBeSpent, to, amount, fee.Satoshi, tagFor);
+                var coinOutput = new CoinOutput(to, amount);
+                var wtxs_ = AddOutgoingTx(tx, toBeSpent, new List<CoinOutput> { coinOutput }, fee.Satoshi, tagFor);
                 ((List<WalletTx>)wtxs).AddRange(wtxs_);
                 return WalletError.Success;
             }
@@ -531,7 +594,7 @@ namespace xchwallet
             }
             // add all inputs so we can satisfy our output
             BigInteger totalInput = 0;
-            var toBeSpent = new List<Tuple<WalletAddr, Coin, Key>>();
+            var toBeSpent = new List<CoinSpend>();
             foreach (var candidate in candidates)
             {
                 // add to list of coins and private keys to spend
@@ -540,7 +603,7 @@ namespace xchwallet
                 tx.Inputs.Add(txin);
                 totalInput += candidate.Coin.Amount.Satoshi;
                 var privateKey = key.ExtKey.Derive(new KeyPath(candidate.Addr.Path)).PrivateKey;
-                toBeSpent.Add(new Tuple<WalletAddr, Coin, Key>(candidate.Addr, candidate.Coin, privateKey));
+                toBeSpent.Add(new CoinSpend(candidate.Addr.Address, candidate.Addr, candidate.Coin, privateKey));
             }
             // check we have enough inputs
             if (totalInput < amount)
@@ -557,8 +620,8 @@ namespace xchwallet
                 currentSatsPerByte = feeRate.SatoshiPerByte;
             }
             // sign inputs
-            var coins = from a in toBeSpent select a.Item2;
-            var keys = from a in toBeSpent select a.Item3;
+            var coins = from a in toBeSpent select a.Coin;
+            var keys = from a in toBeSpent select a.Key;
             // check coins are represented as incoming wallet txs
             CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
             tx.Sign(keys.ToArray(), coins.ToArray());
@@ -571,7 +634,8 @@ namespace xchwallet
             if (result.Success)
             {
                 // log outgoing transaction
-                var wtxs_ = AddOutgoingTx(tx, toBeSpent, to.Address, amount, fee.Satoshi, null);
+                var coinOutput = new CoinOutput(to.Address, amount);
+                var wtxs_ = AddOutgoingTx(tx, toBeSpent, new List<CoinOutput> { coinOutput }, fee.Satoshi, null);
                 ((List<WalletTx>)wtxs).AddRange(wtxs_);
                 return WalletError.Success;
             }
@@ -613,8 +677,27 @@ namespace xchwallet
         {
             var req = new RescanRequest();
             foreach (var tx in txs)
-                req.Transactions.Add(new RescanRequest.TransactionToRescan { TransactionId = uint256.Parse(tx.TxId), BlockId = uint256.Parse(tx.BlockHash) });
+                if (tx.BlockHash != null)
+                    req.Transactions.Add(new RescanRequest.TransactionToRescan { TransactionId = uint256.Parse(tx.TxId), BlockId = uint256.Parse(tx.BlockHash) });
             GetClient().Rescan(req);
+            return true;
+        }
+
+        public bool RecreateTxs(IDbContextTransaction dbtx, Dictionary<string, List<UTXO>> utxos, Dictionary<string, OutgoingTx> outgoingTxs, int currentHeight)
+        {
+            System.Diagnostics.Debug.Assert(dbtx != null);
+            foreach (var kvPair in utxos)
+            {
+                foreach (var utxo in kvPair.Value)
+                    processUtxo(utxo, currentHeight);
+            }
+            db.SaveChanges();
+            foreach (var kvPair in outgoingTxs)
+            {
+                var outgoingTx = kvPair.Value;
+                AddOutgoingTx(outgoingTx.Tx, outgoingTx.Spends, outgoingTx.Outputs, outgoingTx.Fee, null);
+            }
+            db.SaveChanges();
             return true;
         }
         /*

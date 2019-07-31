@@ -74,26 +74,27 @@ namespace xchwallet
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
-        public static T CreateMySqlWalletContext<T>(string connString, bool logToConsole)
+        public static T CreateMySqlWalletContext<T>(string connString, bool logToConsole, bool sensitiveLogging)
             where T : DbContext
         {
             var optionsBuilder = new DbContextOptionsBuilder<T>();
             optionsBuilder.UseMySql(connString);
+            optionsBuilder.EnableSensitiveDataLogging(sensitiveLogging);
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
-        public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole)
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole, bool sensitiveLogging)
             where T : DbContext
         {
             var connString = $"host={host};database={dbName};uid={uid};password={pwd};";
-            return CreateMySqlWalletContext<T>(connString, logToConsole);
+            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging);
         }
 
-        public static T CreateMySqlWalletContext<T>(string host, string dbName, bool logToConsole)
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, bool logToConsole, bool sensitiveLogging)
             where T : DbContext
         {
             var connString = $"host={host};database={dbName};";
-            return CreateMySqlWalletContext<T>(connString, logToConsole);
+            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging);
         }
 
         bool logToConsole;
@@ -305,11 +306,7 @@ namespace xchwallet
         {
             var ctx = ChainTxs.SingleOrDefault(t => t.TxId == txid);
             if (ctx != null)
-            {
-                var txs = WalletTxs.Where(t => t.ChainTxId == ctx.Id);
-                foreach (var tx in txs)
-                    WalletTxs.Remove(tx);
-            }
+                ChainTxs.Remove(ctx);
         }
 
         public IEnumerable<WalletTx> TxsUnAckedGet(string address)

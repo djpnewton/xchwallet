@@ -7,7 +7,6 @@ using CommandLine;
 using CommandLine.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
 using xchwallet;
 
 namespace test
@@ -44,6 +43,8 @@ namespace test
             */
             [Option("scan_addrs", Default = false, HelpText = "Scan addresses in NBXplorer (only effects BTC)")]
             public bool ScanAddrs { get; set; }
+            [Option("recreate_txs", Default = false, HelpText = "Recreate tx history (only effects BTC)")]
+            public bool RecreateTxs { get; set; }
 
             [Option("check_with_blockexplorer", Default = false, HelpText = "Double check balance with block explorer (only effects BTC)")]
             public bool CheckWithBlockExplorer { get; set; }
@@ -242,10 +243,10 @@ namespace test
             if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
             {
                 var connString = dbNameOrConnString.Substring(5);
-                return BaseContext.CreateMySqlWalletContext<WalletContext>(connString, logToConsole);
+                return BaseContext.CreateMySqlWalletContext<WalletContext>(connString, logToConsole, true);
             }
             else
-                return BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbNameOrConnString, logToConsole);
+                return BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbNameOrConnString, logToConsole, true);
         }
 
         static string GetWalletType(string dbName)
@@ -326,23 +327,8 @@ namespace test
             {
                 if (wallet is BtcWallet)
                 {
-                    var txs = wallet.GetChainTxs();
-                    var txsScan = new List<TxScan>();
-                    var count = 0;
-                    foreach (var tx in txs)
-                    {
-                        var resp = Utils.BtcApsComRequest(wallet.IsMainnet(), $"/transaction/{tx.TxId}");
-                        if (resp.StatusCode != System.Net.HttpStatusCode.OK)
-                        {
-                            Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
-                            return 1;
-                        }
-                        dynamic res = JsonConvert.DeserializeObject(resp.Content);
-                        txsScan.Add(new TxScan { TxId = tx.TxId, BlockHash = res.data.blockHash });
-                        Console.WriteLine(count++);
-                        System.Threading.Thread.Sleep(500);
-                    }
-                    ((BtcWallet)wallet).RescanNBXplorer(txsScan);
+                    if (!Utils.ScanBtcTxs((BtcWallet)wallet))
+                        return 1;
                 }
                 else
                 {
@@ -350,26 +336,19 @@ namespace test
                     return 1;
                 }
             }
+            if (opts.RecreateTxs)
+            {
+                var dbtx = Utils.RecreateBtcTxs((BtcWallet)wallet);
+                if (dbtx == null)
+                    return 1;
+                dbtx.Commit();
+            }
             if (opts.CheckWithBlockExplorer)
             {
                 if (wallet is BtcWallet)
                 {
-                    var count = 0;
-                    BigInteger balance = 0;
-                    foreach (var addr in wallet.GetAddresses())
-                    {
-                        var resp = Utils.BtcApsComRequest(wallet.IsMainnet(), $"/address/state/{addr.Address}");
-                        if (resp.StatusCode != System.Net.HttpStatusCode.OK)
-                        {
-                            Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
-                            return 1;
-                        }
-                        dynamic res = JsonConvert.DeserializeObject(resp.Content);
-                        balance += (long)res.data.balance + (long)res.data.pendingReceivedAmount - (long)res.data.pendingSentAmount;
-                        Console.WriteLine($"{count++} - {resp.ResponseUri}");
-                        System.Threading.Thread.Sleep(500);
-                    }
-                    Console.WriteLine($"::block explorer balance: {balance}, ({wallet.AmountToString(balance)} {wallet.Type()})\n");
+                    if (!Utils.CheckWithBtcBlockExplorer((BtcWallet)wallet))
+                        return 1;
                 }
                 else
                 {
