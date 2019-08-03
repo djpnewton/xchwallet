@@ -501,17 +501,22 @@ namespace xchwallet
                 toBeSpent.Add(new CoinSpend(candidate.Addr.Address, candidate.Addr, candidate.Coin, privateKey));
                 // check if we have enough inputs
                 if (totalInput >= amount)
-                    break;
-                //TODO: take into account fees......
+                {
+                    // check if we have enough fee
+                    if (GetFeeRate(tx, toBeSpent).SatoshiPerByte > (decimal)feeUnit)
+                        break;
+                }
             }
             // check we have enough inputs
             logger.LogDebug($"totalInput {totalInput}, amount: {amount}");
             if (totalInput < amount)
+            {
+                logger.LogError("insufficient funds: total inputs are less then sending amount");
                 return WalletError.InsufficientFunds;
+            }
             // check fee rate
             var feeRate = GetFeeRate(tx, toBeSpent);
-            var currentSatsPerByte = feeRate.FeePerK / 1024;
-            if (currentSatsPerByte > feeUnit)
+            if (feeRate.SatoshiPerByte > (decimal)feeUnit)
             {
                 // create a change address
                 var changeAddress = AddChangeAddress(tagChange_);
@@ -522,6 +527,11 @@ namespace xchwallet
                 targetFee += output.GetSerializedSize() * (long)feeUnit;
                 // add the change output
                 changeOutput = tx.Outputs.Add(currentFee - targetFee, changeAddress);
+            }
+            else if (feeRate.SatoshiPerByte < (decimal)feeUnit)
+            {
+                logger.LogError($"insufficient funds: fee rate ({feeRate.SatoshiPerByte} sats/byte) is less then {feeUnit}");
+                return WalletError.InsufficientFunds;
             }
             var coins = from a in toBeSpent select a.Coin;
             var keys = from a in toBeSpent select a.Key;
@@ -561,7 +571,10 @@ namespace xchwallet
                 amount += this.GetBalance(tag);
             // check we have enough funds
             if (amount <= 0)
+            {
+                logger.LogError("insufficient funds: balance is less then or equal to 0");
                 return WalletError.InsufficientFunds;
+            }
             // create tx template with destination as first output
             var tx = Transaction.Create(GetNetwork());
             var money = new Money((ulong)amount);
@@ -586,7 +599,6 @@ namespace xchwallet
                     return res;
             }
             var utxos = GetClient().GetUTXOs(pubkey);
-            //TODO: GetAddresses(tags)
             foreach (var tag in tagFrom)
             {
                 var addrs = GetAddresses(tag);
@@ -607,7 +619,10 @@ namespace xchwallet
             }
             // check we have enough inputs
             if (totalInput < amount)
+            {
+                logger.LogError("insufficient funds: total inputs are less then sending amount");
                 return WalletError.InsufficientFunds;
+            }
             // adjust fee rate by reducing the output incrementally
             var feeRate = new FeeRate(new Money(0L));
             decimal currentSatsPerByte = 0;
@@ -615,7 +630,11 @@ namespace xchwallet
             {
                 tx.Outputs[0].Value -= 1L;
                 amount -= 1;
-
+                if (amount <= 0)
+                {
+                    logger.LogError("insufficient funds: after fees the amount sent is 0");
+                    return WalletError.InsufficientFunds;
+                }
                 feeRate = GetFeeRate(tx, toBeSpent);
                 currentSatsPerByte = feeRate.SatoshiPerByte;
             }

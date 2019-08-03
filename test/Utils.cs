@@ -61,6 +61,8 @@ namespace test
                     if (resp.StatusCode != System.Net.HttpStatusCode.OK)
                     {
                         Console.WriteLine($"Error: http status code {resp.StatusCode} ({resp.ResponseUri})");
+                        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                            break; // maybe there is no transactions for this address yet
                         return null;
                     }
                     dynamic res = JsonConvert.DeserializeObject(resp.Content);
