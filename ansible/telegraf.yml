@@ -28,6 +28,12 @@
       retries: 2
       delay: 5
 
+    - name: adding telegraf user to group adm (allow to read log files)
+      user:
+        name: telegraf
+        groups: adm
+        append: yes
+
     - file: path=/opt/telegraf state=directory
 
     - name: install pip3
