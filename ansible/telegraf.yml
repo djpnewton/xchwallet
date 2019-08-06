@@ -12,6 +12,7 @@
     python_testnet_flag: "{{ '--testnet' if testnet else '' }}"
   tasks:
 
+    # install
     - name: download telegraf package
       get_url:
         url: "{{ telegraf_install_url }}"
@@ -27,14 +28,15 @@
       retries: 2
       delay: 5
 
+    - file: path=/opt/telegraf state=directory
+
     - name: install pip3
       apt: name=python3-pip state=present
 
     - name: install python packages
       shell: pip3 install requests==2.22.0
 
-    - file: path=/opt/telegraf state=directory
-
+    # blockchain clients
     - name: install bitcoin telegraf script
       template:
         src: templates/telegraf_bitcoin.py
@@ -47,15 +49,37 @@
         dest: /opt/telegraf/telegraf_waves.py
         mode: 0755
 
-    - name: install telegraf config
-      template:
-        src: templates/telegraf.conf.j2
-        dest: /etc/telegraf/telegraf.conf
-
     - name: install telegraf blockchain config
       template:
         src: templates/telegraf_blockchain.conf.j2
         dest: /etc/telegraf/telegraf.d/blockchain.conf
+
+    # sshd
+    - name: install pam sshd script
+      template:
+        src: templates/pam_sshd.py
+        dest: /opt/telegraf/pam_sshd.py
+        mode: 0700
+
+    - name: add to pam conf
+      lineinfile: dest=/etc/pam.d/sshd line="session required pam_exec.so /opt/telegraf/pam_sshd.py --output /opt/telegraf/sshd/sshd.json"
+
+    - name: install sshd telegraf script
+      template:
+        src: templates/telegraf_sshd.py
+        dest: /opt/telegraf/telegraf_sshd.py
+        mode: 0755
+
+    - name: install telegraf sshd config
+      template:
+        src: templates/telegraf_sshd.conf.j2
+        dest: /etc/telegraf/telegraf.d/sshd.conf
+
+    # general config
+    - name: install telegraf config
+      template:
+        src: templates/telegraf.conf.j2
+        dest: /etc/telegraf/telegraf.conf
 
     - name: restart telegraf
       service: name=telegraf state=restarted
