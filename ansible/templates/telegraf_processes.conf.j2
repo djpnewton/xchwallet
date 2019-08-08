@@ -1,0 +1,9 @@
+[[inputs.exec]]
+    commands = [
+		"/opt/telegraf/tig-process_status.sh bitcoind",
+		"/opt/telegraf/tig-process_status.sh waves",
+		"/opt/telegraf/tig-process_status.sh nbxplorer"
+	       ]
+    name_override = "process_status"
+    data_format = "json"
+    timeout = "10s"
