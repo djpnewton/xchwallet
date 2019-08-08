@@ -1,0 +1,12 @@
+[[inputs.exec]]
+    commands = ["/opt/telegraf/telegraf_balance.py {{python_testnet_flag}}"]
+    name_prefix = "RedRat_testnet_"
+    data_format = "json"
+    timeout = "10s"
+
+[[inputs.exec]]
+    commands = ["/opt/telegraf/telegraf_balance.py"]
+    name_prefix = "RedRat_mainnet_"
+    data_format = "json"
+    timeout = "10s"
+
