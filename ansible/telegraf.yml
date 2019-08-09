@@ -81,18 +81,6 @@
         src: templates/telegraf_sshd.conf.j2
         dest: /etc/telegraf/telegraf.d/sshd.conf
 
-    # zap_balance
-    - name: install the zap balance config
-      template:
-        src: templates/telegraf_balance.conf.j2
-        dest: /etc/telegraf/telegraf.d/telegraf_balance.conf
-
-    - name: install the zap balance script
-      template:
-        src: templates/telegraf_balance.py
-        dest: /opt/telegraf/telegraf_balance.py
-        mode: 0755
-
     # processes check
     - name: install processes telegraf script
       template:
