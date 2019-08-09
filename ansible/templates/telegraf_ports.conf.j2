@@ -1,3 +1,13 @@
+{% if deploy_host == "blockchain.acuerdo.com" %}
+[[inputs.net_response]]
+  address = "localhost:8332"
+  protocol = "tcp"
+  timeout = "5s"
+[[inputs.net_response]]
+  address = "localhost:8333"
+  protocol = "tcp"
+  timeout = "5s"
+{% else %}
 [[inputs.net_response]]
   address = "localhost:18332"
   protocol = "tcp"
@@ -6,6 +16,7 @@
   address = "localhost:18333"
   protocol = "tcp"
   timeout = "5s"
+{% endif %}
 [[inputs.net_response]]
   address = "localhost:6863"
   protocol = "tcp"
