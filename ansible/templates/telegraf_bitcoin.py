@@ -59,8 +59,12 @@ try:
 except:
     pass
 
+# caluulate absolute difference between local and remote blockheight
+diff_blockheight = abs(local_blockheight - remote_blockheight)
+
 d = {"local_blockheight": local_blockheight, \
-      "nbxplorer_blockheight": nbxplorer_blockheight, \
-      "nbxplorer_synced": nbxplorer_synced, \
-      "remote_blockheight": remote_blockheight}
+     "nbxplorer_blockheight": nbxplorer_blockheight, \
+     "nbxplorer_synced": nbxplorer_synced, \
+     "remote_blockheight": remote_blockheight, \
+     "diff_blockheight": diff_blockheight}
 print(json.dumps(d))

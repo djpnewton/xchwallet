@@ -81,6 +81,24 @@
         src: templates/telegraf_sshd.conf.j2
         dest: /etc/telegraf/telegraf.d/sshd.conf
 
+    # processes check
+    - name: install processes telegraf script
+      template:
+        src: templates/telegraf_processes.sh
+        dest: /opt/telegraf/telegraf_processes.sh
+        mode: 0755
+
+    - name: install telegraf processes config
+      template:
+        src: templates/telegraf_processes.conf.j2
+        dest: /etc/telegraf/telegraf.d/telegraf_processes.conf
+
+    # net_response
+    - name: install net_response config
+      template:
+        src: templates/telegraf_ports.conf.j2
+        dest: /etc/telegraf/telegraf.d/telegraf_ports.conf
+
     # general config
     - name: install telegraf config
       template:
