@@ -18,13 +18,23 @@
         system: yes
         state: present
 
-    - name: copy nbxplorer
-      copy:
-        src: ../NBXplorer/
+    # remove dir if is not git (because we used to deploy another way)
+    - shell: if [[ -d "/opt/NBXplorer/" && ! -d "/opt/NBXplorer/.git" ]]; then rm /opt/NBXplorer -rf; fi
+      args:
+        executable: /bin/bash
+
+    - name: git clone/checkout nbxplorer
+      git:
+        repo: https://github.com/dgarage/NBXplorer.git
         dest: /opt/NBXplorer
+        version: v2.0.0.55
+
+    - file:
+        path: /opt/NBXplorer
         owner: xchwallet
         group: xchwallet
         mode: 0755
+        recurse: yes
 
     - file:
         path: /home/xchwallet/.nbxplorer/Main
