@@ -466,6 +466,12 @@ namespace xchwallet
             return asset.BigIntToAmount(value).ToString();
         }
 
+        public override string AmountToString(decimal value)
+        {
+            var zeros = string.Concat(Enumerable.Repeat("0", asset.Decimals));
+            return value.ToString("#." + zeros);
+        }
+
         public override BigInteger StringToAmount(string value)
         {
             var _scale = new decimal(1, 0, 0, false, asset.Decimals);

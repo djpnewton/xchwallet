@@ -36,6 +36,7 @@ namespace xchwallet
         FiatWalletTx UpdateWithdrawal(string txid, long date, long amount, string bankMetadata);
         FiatWalletTx GetTx(string depositCode);
         string AmountToString(long value);
+        string AmountToString(decimal value);
         long StringToAmount(string value);
         BankAccount GetAccount();
 
@@ -200,6 +201,11 @@ namespace xchwallet
         {
             var _scale = new decimal(1, 0, 0, false, 2);
             return ((decimal)value * _scale).ToString();
+        }
+
+        public string AmountToString(decimal value)
+        {
+            return value.ToString("#.00");
         }
 
         public long StringToAmount(string value)

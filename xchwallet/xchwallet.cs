@@ -139,6 +139,7 @@ namespace xchwallet
         void AcknowledgeTransactions(IEnumerable<WalletTx> txs);
         bool ValidateAddress(string address);
         string AmountToString(BigInteger value);
+        string AmountToString(decimal value);
         BigInteger StringToAmount(string value);
         IDbContextTransaction BeginDbTransaction();
 
@@ -157,6 +158,7 @@ namespace xchwallet
         public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null, string ReplaceTxId = null);
         public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string ReplaceTxId = null);
         public abstract string AmountToString(BigInteger value);
+        public abstract string AmountToString(decimal value);
         public abstract BigInteger StringToAmount(string value);
         public abstract bool ValidateAddress(string address);
 

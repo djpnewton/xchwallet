@@ -685,6 +685,11 @@ namespace xchwallet
             return d.ToString();
         }
 
+        public override string AmountToString(decimal value)
+        {
+            return value.ToString("#.00000000");
+        }
+
         public override BigInteger StringToAmount(string value)
         {
             var _scale = new decimal(1, 0, 0, false, 8);
