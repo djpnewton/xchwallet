@@ -196,5 +196,13 @@ namespace test
             return true;
         }
 
+        public static bool UpdateIoAmounts(WavWallet wallet)
+        {
+            var dbtx = wallet.BeginDbTransaction();
+            wallet.UpdateFromBlockchain(dbtx, updateInputsAndOutputs: true);
+            wallet.Save();
+            dbtx.Commit();
+            return true;
+        }
     }
 }

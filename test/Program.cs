@@ -45,15 +45,20 @@ namespace test
             public bool ScanAddrs { get; set; }
             [Option("recreate_txs", Default = false, HelpText = "Recreate tx history (only effects BTC)")]
             public bool RecreateTxs { get; set; }
-
             [Option("check_with_blockexplorer", Default = false, HelpText = "Double check balance with block explorer (only effects BTC)")]
             public bool CheckWithBlockExplorer { get; set; }
+
+            [Option("update_io_amounts", Default = false, HelpText = "Check and update input and output amounts (only effects Waves tokens)")]
+            public bool UpdateIoAmounts { get; set; }
 
             [Option('u', "update", Default = false, HelpText = "Update from blockchain")]
             public bool Update { get; set; }
 
-            [Option('m', "MaxTxs", Default = 10, HelpText = "Max txs to show per tag")]
+            [Option('m', "maxtxs", Default = 10, HelpText = "Max txs to show per tag")]
             public int MaxTxs { get; set; }
+
+            [Option('t', "txid", HelpText = "Display detail about a transaction")]
+            public string TxId { get; set; }
         }
 
         [Verb("balance", HelpText = "Show total balance of wallet tags")]
@@ -238,6 +243,24 @@ namespace test
             Console.WriteLine($"::chaintx count: {wallet.GetChainTxs().Count()}");
         }
 
+        static void PrintTx(IWallet wallet, string txId)
+        {
+            var ctx = wallet.GetChainTxs().Where(t => t.TxId == txId).FirstOrDefault();
+            if (ctx != null)
+            {
+                Console.WriteLine($"{txId}:");
+                Console.WriteLine($"  fee: {ctx.Fee}, status: {ctx.Status()}");
+                Console.WriteLine("  inputs:");
+                foreach (var input in ctx.TxInputs)
+                    Console.WriteLine($"    {input.Addr}, {input.N}, {input.Amount}");
+                Console.WriteLine($"    total: {ctx.AmountInputs()}");
+                Console.WriteLine("  outputs:");
+                foreach (var output in ctx.TxOutputs)
+                    Console.WriteLine($"    {output.Addr}, {output.N}, {output.Amount}");
+                Console.WriteLine($"    total: {ctx.AmountOutputs()}");
+            }
+        }
+
         static WalletContext GetWalletContext(string dbNameOrConnString, bool logToConsole)
         {
             if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
@@ -356,6 +379,19 @@ namespace test
                     return 1;
                 }
             }
+            if (opts.UpdateIoAmounts)
+            {
+                if (wallet is WavWallet)
+                {
+                    if (!Utils.UpdateIoAmounts((WavWallet)wallet))
+                        return 1;
+                }
+                else
+                {
+                    Console.WriteLine("Error: not Waves (or waves based token) wallet");
+                    return 1;
+                }
+            }
             if (opts.Update)
             {
                 var dbtx = wallet.BeginDbTransaction();
@@ -363,7 +399,10 @@ namespace test
                 wallet.Save();
                 dbtx.Commit();
             }
-            PrintWallet(wallet, opts.MinimumConfirmations, opts.MaxTxs);
+            if (string.IsNullOrEmpty(opts.TxId))
+                PrintWallet(wallet, opts.MinimumConfirmations, opts.MaxTxs);
+            else
+                PrintTx(wallet, opts.TxId);
             return 0;
         }
 
