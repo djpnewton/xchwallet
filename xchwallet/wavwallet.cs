@@ -514,7 +514,7 @@ namespace xchwallet
         public override string AmountToString(decimal value)
         {
             var zeros = string.Concat(Enumerable.Repeat("0", asset.Decimals));
-            return value.ToString("#." + zeros);
+            return value.ToString("#0." + zeros);
         }
 
         public override BigInteger StringToAmount(string value)

@@ -405,7 +405,7 @@ namespace xchwallet
 
         public override string AmountToString(decimal value)
         {
-            return value.ToString("#.000000000000000000");
+            return value.ToString("#0.000000000000000000");
         }
 
         public override BigInteger StringToAmount(string value)

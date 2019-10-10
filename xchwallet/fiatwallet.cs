@@ -205,7 +205,7 @@ namespace xchwallet
 
         public string AmountToString(decimal value)
         {
-            return value.ToString("#.00");
+            return value.ToString("#0.00");
         }
 
         public long StringToAmount(string value)
