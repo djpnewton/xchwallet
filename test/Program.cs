@@ -15,9 +15,13 @@ namespace test
     {
         class CommonOptions
         {
-            [Option("showsql", Default = false, HelpText = "Show SQL commands")]
-            public bool ShowSql { get; set; }
-            [Option('n', "dbname", Required = true, HelpText = "Wallet database name (prefix with 'conn|' to use a full connection string if you need extra parameters like remote server, username etc)")]
+            [Option("showsql", HelpText = "Show SQL commands (can use 'SHOWSQL' environment variable)")]
+            public bool? ShowSql { get; set; }
+            [Option("mainnet", HelpText = "Testnet or Mainnet (can use 'MAINNET' environment variable)")]
+            public bool? Mainnet { get; set; }
+            [Option("node", Default = null, HelpText = "Specify node to connect to (can use 'NODE' environment variable)")]
+            public string Node { get; set; }
+            [Option('n', "dbname", Default = null, HelpText = "Wallet database name (prefix with 'conn|' to use a full connection string if you need extra parameters like remote server, username etc) (can use 'DBNAME' environment variable)")]
             public string DbName { get; set; }
         }
 
@@ -261,8 +265,31 @@ namespace test
             }
         }
 
+        static bool HasEnvVar(string name)
+        {
+            var vars = Environment.GetEnvironmentVariables();
+            return vars.Contains(name);
+        }
+
+        static string GetRequiredConfig(string name, string cmdValue)
+        {
+            if (cmdValue == null)
+            {
+                if (HasEnvVar(name))
+                    return Environment.GetEnvironmentVariable(name);
+                else
+                    GetLogger().LogError($"ERROR: no {name} specified");
+            }
+            GetLogger().LogInformation($"Required config {name}={cmdValue}");
+            return cmdValue;
+        }
+
         static WalletContext GetWalletContext(string dbNameOrConnString, bool logToConsole)
         {
+            dbNameOrConnString = GetRequiredConfig("DBNAME", dbNameOrConnString);
+            if (dbNameOrConnString == null)
+                return null;
+
             if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
             {
                 var connString = dbNameOrConnString.Substring(5);
@@ -275,26 +302,48 @@ namespace test
         static string GetWalletType(string dbName)
         {
             using (var db = GetWalletContext(dbName, false))
+            {
+                if (db == null)
+                    return null;
                 return Util.GetWalletType(db);
+            }
         }
 
-        static IWallet CreateWallet(string dbName, string walletType, bool showSql)
+        static IWallet CreateWallet(string node, bool? mainnet, string dbName, string walletType, bool? showSql)
         {
+            node = GetRequiredConfig("NODE", node);
+            if (node == null)
+                return null;
+            dbName = GetRequiredConfig("DBNAME", dbName);
+            if (dbName == null)
+                return null;
+            var mainnet_ = false;
+            if (mainnet.HasValue)
+                mainnet_ = mainnet.Value;
+            else if (HasEnvVar("MAINNET"))
+                mainnet_ = bool.Parse(Environment.GetEnvironmentVariable("MAINNET"));
+            var showSql_ = false;
+            if (showSql.HasValue)
+                showSql_ = showSql.Value;
+            else if (HasEnvVar("SHOWSQL"))
+                showSql_ = bool.Parse(Environment.GetEnvironmentVariable("SHOWSQL"));
+
             walletType = walletType.ToUpper();
-            GetLogger().LogDebug("Creating wallet ({0}) for testnet using db: '{1}'", walletType, dbName);
+            var network = mainnet_ ? "mainnet" : "testnet";
+            GetLogger().LogDebug($"Creating wallet ({walletType}) for {network} using db: '{dbName}', node: '{node}'");
 
             // create db context and apply migrations
-            var db = GetWalletContext(dbName, showSql);
+            var db = GetWalletContext(dbName, showSql_);
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, false, new Uri("http://10.50.1.100:24444"));
+                return new BtcWallet(GetLogger(), db, mainnet_, new Uri(node));
             else if (walletType == EthWallet.TYPE)
-                return new EthWallet(GetLogger(), db, false, "https://ropsten.infura.io", "http://localhost:5001");
+                return new EthWallet(GetLogger(), db, mainnet_, node, "http://localhost:5001" /*TODO: get this from cmdline/env*/);
             else if (walletType == WavWallet.TYPE)
-                return new WavWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
+                return new WavWallet(GetLogger(), db, mainnet_, new Uri(node));
             else if (walletType == ZapWallet.TYPE)
-                return new ZapWallet(GetLogger(), db, false, new Uri("https://testnodes.wavesnodes.com"));
+                return new ZapWallet(GetLogger(), db, mainnet_, new Uri(node));
             else
                 throw new Exception("Wallet type not recognised");
         }
@@ -312,15 +361,17 @@ namespace test
         static IWallet OpenWallet(CommonOptions opts)
         {
             var walletType = GetWalletType(opts.DbName);
-            var wallet = CreateWallet(opts.DbName, walletType, opts.ShowSql);
+            var wallet = CreateWallet(opts.Node, opts.Mainnet, opts.DbName, walletType, opts.ShowSql);
             if (wallet == null)
-                Console.WriteLine("Unable to determine wallet type (%s)", walletType);
+                Console.WriteLine($"Unable to determine wallet type ({walletType})");
             return wallet;
         }
 
         static int RunNew(NewOptions opts)
         {
-            var wallet = CreateWallet(opts.DbName, opts.Type, opts.ShowSql);
+            var wallet = CreateWallet(opts.Node, opts.Mainnet, opts.DbName, opts.Type, opts.ShowSql);
+            if (wallet == null)
+                return 1;
             wallet.Save();
             return 0;
         }
