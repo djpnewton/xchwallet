@@ -1,0 +1,68 @@
+---
+- name: wavescache
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: ansible group
+      group: 
+        name: xchwallet
+        state: present
+
+    - name: ansible user
+      user:
+        name: xchwallet
+        shell: /usr/sbin/nologin
+        groups: geth
+        system: yes
+        state: present
+
+    - name: find python3.6
+      shell: which python3.6 python3 | head -n1
+      register: python36
+
+    - set_fact: 
+        python36={{ python36.stdout }}
+
+    - name: copy wavescache.zip
+      copy:
+        src: ../wavescache.zip
+        dest: /opt/wavescache.zip
+
+    - name: extract wavescache.zip
+      shell: unzip -o /opt/wavescache.zip -d /opt/wavescache
+
+    - name: set owner
+      file:
+        path: /opt/wavescache
+        recurse: true
+        owner: xchwallet
+        group: xchwallet
+        mode: 0755
+
+    - name: copy wavescache.service
+      template:
+        src: templates/wavescache.service
+        dest: /etc/systemd/system/wavescache.service
+
+    - name: install python requiremnents
+      shell: "{{python36}} -mpip install --system -r /opt/wavescache/requirements.txt"
+
+    - name: set testnet
+      replace:
+        path: /opt/wavescache/config.cfg
+        regexp: '(testnet=)True'
+        replace: '\1{{testnet}}'
+
+    - name: stop wavescache service
+      service: 
+        name: wavescache
+        state: stopped
+        enabled: no
+
+    - name: start wavescache service
+      service: 
+        name: wavescache
+        state: started
+        enabled: yes

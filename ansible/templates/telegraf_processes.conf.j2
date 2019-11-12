@@ -1,8 +1,9 @@
 [[inputs.exec]]
     commands = [
 		"/opt/telegraf/telegraf_processes.sh bitcoind",
+		"/opt/telegraf/telegraf_processes.sh nbxplorer",
 		"/opt/telegraf/telegraf_processes.sh waves",
-		"/opt/telegraf/telegraf_processes.sh nbxplorer"
+		"/opt/telegraf/telegraf_processes.sh wavescache"
 	       ]
     name_override = "process_status"
     data_format = "json"

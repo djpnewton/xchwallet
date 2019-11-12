@@ -83,7 +83,6 @@ def parse_transfer_tx(payload):
     if len(payload) < fmt_start_len:
         msg = "transfer tx buffer too short to decode start tx"
         logger.error(msg)
-        utils.email_buffer(logger, msg, payload)
     tx_type, sig, tx_type2, pubkey, asset_flag = \
         struct.unpack_from(fmt_start, payload)
     offset = fmt_start_len
@@ -109,7 +108,6 @@ def parse_transfer_tx(payload):
     if len(payload) - offset < fmt_mid_len:
         msg = f"transfer tx buffer too short ({len(payload)-offset}) to decode middle of tx"
         logger.error(msg)
-        utils.email_buffer(logger, msg, payload)
     timestamp, amount, fee = struct.unpack_from(fmt_mid, payload[offset:])
     offset += fmt_mid_len
     # end of tx (recipient and attachment length)
@@ -128,7 +126,6 @@ def parse_transfer_tx(payload):
     if len(payload) - offset < fmt_end_len:
         msg = f"transfer tx buffer too short ({len(payload)-offset}) to decode end of tx"
         logger.error(msg)
-        utils.email_buffer(logger, msg, payload)
     recipient, attachment_len = struct.unpack_from(fmt_end, payload[offset:])
     print(recipient)
     print(attachment_len)
@@ -138,19 +135,26 @@ def parse_transfer_tx(payload):
 
     return offset + attachment_len, tx_type, sig, tx_type2, pubkey, asset_flag, asset_id, fee_asset_flag, fee_asset_id, timestamp, amount, fee, recipient, attachment
 
-def parse_block_txs(payload):
+def parse_block_txs(tx_count, payload):
     ## Not sure if we will need to parse the block txs, it will require parsing each of the tx types
     ## because they have variable length fields.
     ## We could just RPC to the node and get the nicely formatted block txs as a shortcut.
-    pass
 
-def parse_block(payload):
-    fmt_header = ">BQ64slQ32sl"
+    return []
+
+def parse_block(wutx, payload):
+    # Binary format version 3
+    # https://docs.wavesplatform.com/en/blockchain/binary-format/block-binary-format.html
+    fmt_header = ">Bq64sq32sl"
     fmt_header_len = struct.calcsize(fmt_header)
-    version, timestamp, parent_sig, consensus_block_len, base_target, generation_sig, txs_len = \
+    version, timestamp, parent_sig, base_target, generation_sig, tx_count = \
         struct.unpack_from(fmt_header, payload)
+    fmt_block_sig = ">64s"
+    block_sig, = struct.unpack_from(fmt_block_sig, payload[-64:])
     offset = fmt_header_len
-    txs = parse_block_txs(payload[offset:offset + txs_len])
+    if version != 3:
+        raise Exception("block version is not 3! (is %d)" % version)
+    return parse_block_txs(tx_count, payload[offset:])
 
 def transfer_asset_txid(pubkey, asset_id, fee_asset_id, timestamp, amount, fee, recipient, attachment):
     serialized_data = b'\4' + \
@@ -165,7 +169,7 @@ def transfer_asset_txid(pubkey, asset_id, fee_asset_id, timestamp, amount, fee, 
         attachment
     return utils.txid_from_txdata(serialized_data)
 
-def parse_message(wutx, msg, on_transfer_utx=None):
+def parse_message(wutx, msg, on_transfer_utx=None, on_block_transfer_tx=None):
     orig_msg = msg
 
     handshake = decode_handshake(msg)
@@ -206,7 +210,6 @@ def parse_message(wutx, msg, on_transfer_utx=None):
                     try:
                         tx_len, tx_type, sig, tx_type2, pubkey, asset_flag, asset_id, fee_asset_flag, fee_asset_id, timestamp, amount, fee, recipient, attachment = parse_transfer_tx(payload)
                     except Exception as e:
-                        utils.email_buffer(logger, f"transfer tx parse exception: {e}", payload)
                         return
 
                     txid = transfer_asset_txid(pubkey, asset_id, fee_asset_id, timestamp, amount, fee, recipient, attachment)
@@ -218,7 +221,10 @@ def parse_message(wutx, msg, on_transfer_utx=None):
             if content_id == CONTENT_ID_BLOCK:
                 # block
                 #logger.debug(f"block: len {len(payload)}")
-                parse_block(payload)
+                ###TODO: why dont we get all block messages??!!??
+                ###TODO: why is the block format not 3??!!??
+                #parse_block(wutx, payload)
+                pass
 
             if content_id == CONTENT_ID_SCORE:
                 # score
@@ -229,9 +235,10 @@ def parse_message(wutx, msg, on_transfer_utx=None):
 
 class WavesUTX():
 
-    def __init__(self, on_msg, on_transfer_utx, addr="127.0.0.1", port=6863, testnet=True):
+    def __init__(self, on_msg, on_transfer_utx, on_block_transfer_tx, addr="127.0.0.1", port=6863, testnet=True):
         self.on_msg = on_msg
         self.on_transfer_utx = on_transfer_utx
+        self.on_block_transfer_tx = on_block_transfer_tx
         self.addr = addr
         self.port = port
         self.testnet = testnet
@@ -264,7 +271,7 @@ class WavesUTX():
                     #logger.debug(f"recv: {len(data)}")
                     if self.on_msg:
                         self.on_msg(self, data)
-                    parse_message(self, data, self.on_transfer_utx)
+                    parse_message(self, data, self.on_transfer_utx, self.on_block_transfer_tx)
                 else:
                     # if data is empty the other side has closed the connection
                     logger.info("empty string from socket.recv(): the socket has been closed")
@@ -326,8 +333,10 @@ def test_p2p():
         print(to_hex(msg))
     def on_transfer_utx(wutx, txid, sig, pubkey, asset_id, timestamp, amount, fee, recipient, attachment):
         print(f"!transfer!: txid {txid}, recipient {base58.b58encode(recipient)}, amount {amount}")
+    def on_block_transfer_tx(wutx, txid, sig, sender, asset_id, timestamp, amount, fee, recipient, attachment):
+        print(f"!blk transfer!: txid {txid}, recipient {base58.b58encode(recipient)}, amount {amount}")
 
-    wutx = WavesUTX(on_msg, on_transfer_utx)
+    wutx = WavesUTX(on_msg, on_transfer_utx, on_block_transfer_tx)
     wutx.start()
     while 1:
         gevent.sleep(1)

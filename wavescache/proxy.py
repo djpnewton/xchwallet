@@ -109,7 +109,7 @@ class Proxy():
         self.runloop_greenlet = gevent.Greenlet(runloop)
         if group != None:
             group.add(self.runloop_greenlet)
-        # check node/wallet and start greenlets
+        # start greenlets
         gevent.spawn(start_greenlets)
 
     def stop(self):
