@@ -18,8 +18,25 @@ app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 cache = {}
+address_index = {}
 
-def create_response(path):
+def add_address_to_cache(addr, path):
+    if addr:
+        logger.info("indexing cache: " + addr + ", " + path)
+        if not addr in address_index:
+            address_index[addr] = {}
+        address_index[addr][path] = True
+
+def clear_address_from_cache(addr):
+    if addr in address_index:
+        logger.info("clearing cache: " + addr)
+        for key in address_index[addr].keys():
+            if key in cache:
+                del cache[key]
+                logger.info("  - " + key)
+        del address_index[addr]
+
+def create_response(path, addr=None):
     if path in cache:
         logger.info("using cache: " + path)
         body, status_code, content_type = cache[path]
@@ -34,6 +51,7 @@ def create_response(path):
         # cache value for next time if response is ok
         if response.ok:
             cache[path] = (response.text, response.status_code, content_type) 
+            add_address_to_cache(addr, path)
     return res
 
 @app.route('/assets/details/<txid>')
@@ -45,7 +63,7 @@ def proxy_asset_tx_info(txid):
 @app.route('/transactions/address/<addr>/limit/<limit>')
 def proxy_addr_txs(addr, limit):
     path = request.full_path[1:]
-    return create_response(path)
+    return create_response(path, addr)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

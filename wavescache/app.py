@@ -42,16 +42,8 @@ def on_transfer_utx(wutx, txid, sig, pubkey, asset_id, timestamp, amount, fee, r
 
     logger.info("tx from %s to %s" % (sender, recipient))
 
-    address_cache_to_invalidate = None
-    ##TODO
-    #if recipient in addresses:
-    #    address_cache_to_invalidate = recipient
-    #elif sender in addresses:
-    #    addresses_cache_to_invalidate = sender
-    #
-    #if address_cache_to_invalidate:
-    #    #TODO
-    #    pass
+    proxy.clear_address_from_cache(sender)
+    proxy.clear_address_from_cache(recipient)
 
 def sigint_handler(signum, frame):
     global keep_running
@@ -74,8 +66,8 @@ if __name__ == "__main__":
 
     logger.info("starting greenlets")
     group = gevent.pool.Group()
-    proxy = proxy.Proxy()
-    proxy.start(group)
+    wproxy = proxy.Proxy()
+    wproxy.start(group)
     port = 6863
     if not cfg.testnet:
         port = 6868
@@ -92,4 +84,5 @@ if __name__ == "__main__":
             logger.error(msg)
             break
     logger.info("stopping greenlets")
+    wproxy.stop()
     wutx.stop()
