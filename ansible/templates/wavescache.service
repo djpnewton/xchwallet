@@ -6,6 +6,7 @@ After=network.target
 User=xchwallet
 Group=xchwallet
 
+Environment="ADDR=0.0.0.0"
 ExecStart={{python36}} /opt/wavescache/app.py
 
 Restart=always

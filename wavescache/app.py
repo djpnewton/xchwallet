@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import os
 import logging
 import signal
 
@@ -75,7 +76,10 @@ if __name__ == "__main__":
 
     logger.info("starting greenlets")
     group = gevent.pool.Group()
-    wproxy = proxy.Proxy()
+    if "ADDR" in os.environ:
+        wproxy = proxy.Proxy(addr=os.environ["ADDR"])
+    else:
+        wproxy = proxy.Proxy()
     wproxy.start(group)
     port = 6863
     if not cfg.testnet:
