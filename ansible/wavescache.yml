@@ -14,7 +14,7 @@
       user:
         name: xchwallet
         shell: /usr/sbin/nologin
-        groups: geth
+        groups: xchwallet
         system: yes
         state: present
 
