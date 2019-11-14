@@ -33,8 +33,12 @@ namespace xchwallet
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
         FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata);
         FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account);
-        FiatWalletTx UpdateWithdrawal(string txid, long date, long amount, string bankMetadata);
+        FiatWalletTx UpdateWithdrawal(string depositCode, long date, long amount, string bankMetadata);
         FiatWalletTx GetTx(string depositCode);
+        IEnumerable<FiatWalletTx> GetPendingDeposits();
+        IEnumerable<FiatWalletTx> GetPendingWithdrawals();
+        long AmountToLong(decimal value);
+        decimal AmountToDecimal(long value);
         string AmountToString(long value);
         string AmountToString(decimal value);
         long StringToAmount(string value);
@@ -192,9 +196,29 @@ namespace xchwallet
             return db.TxGet(depositCode);
         }
 
+        public IEnumerable<FiatWalletTx> GetPendingDeposits()
+        {
+            return db.TxsGet(WalletDirection.Incomming, false);
+        }
+
+        public IEnumerable<FiatWalletTx> GetPendingWithdrawals()
+        {
+            return db.TxsGet(WalletDirection.Outgoing, false);
+        }
+
         public BankAccount GetAccount()
         {
             return account;
+        }
+
+        public long AmountToLong(decimal value)
+        {
+            return Convert.ToInt64(decimal.Round(value * 100));
+        }
+
+        public decimal AmountToDecimal(long value)
+        {
+            return Convert.ToDecimal(value) / 100;
         }
 
         public string AmountToString(long value)

@@ -788,6 +788,14 @@ namespace xchwallet
             return new List<FiatWalletTx>();
         }
 
+        public IEnumerable<FiatWalletTx> TxsGet(WalletDirection direction, bool completed)
+        {
+            if (completed)
+                return WalletTxs.Where(t => t.Direction == direction && t.BankTxId != null);
+            else
+                return WalletTxs.Where(t => t.Direction == direction && t.BankTxId == null);
+        }
+
         public FiatWalletTx TxGet(string depositCode)
         {
             return WalletTxs.SingleOrDefault(t => t.DepositCode == depositCode);
