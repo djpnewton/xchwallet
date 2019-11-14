@@ -53,7 +53,7 @@
       replace:
         path: /opt/wavescache/config.cfg
         regexp: '(testnet=)True'
-        replace: '\1{{testnet}}'
+        replace: '\1{{testnet | bool}}'
 
     - name: stop wavescache service
       service: 
