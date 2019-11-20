@@ -69,10 +69,21 @@ def proxy_addr_txs(addr, limit):
 @app.route('/<path:path>')
 def proxy(path):
     """Proxy connections to the API"""
-    logger.info("proxying path: " + path)
+    logger.info("proxying path: GET - " + path)
     url = "%s/%s" % (cfg.node_http_base_url, path)
     args = dict(request.args.items())
     response = requests.get(url, params=args)
+    res = Response(response=response.text, status=response.status_code, mimetype=response.headers["Content-Type"])
+    return res
+
+@app.route('/', defaults={'path': ''}, methods=("POST",))
+@app.route('/<path:path>', methods=("POST",))
+def proxy_post(path):
+    """Proxy connections to the API"""
+    logger.info("proxying path: POST - " + path)
+    url = "%s/%s" % (cfg.node_http_base_url, path)
+    args = dict(request.args.items())
+    response = requests.post(url, params=args, data=request.data, headers=request.headers)
     res = Response(response=response.text, status=response.status_code, mimetype=response.headers["Content-Type"])
     return res
 
