@@ -360,10 +360,12 @@ namespace xchwallet
                     if (ignoreFees)
                         amountRemaining -= fee;
                     signedSpendTxs.Add(new Tuple<string, TransferTransaction>(acct.Address, tx));
+                    logger.LogDebug("acct {0}, amountThisAddr: {1}, fee {2}, amountRemaining {3}", acct.Address, amountThisAddress, fee, amountRemaining);
                 }
                 feeTotal += fee;
             }
             logger.LogDebug("feeMax {0}, feeTotal {1}", feeMax, feeTotal);
+            logger.LogDebug("amount {0}", amount);
             logger.LogDebug("amountRemaining {0}", amountRemaining);
             if (feeTotal > feeMax)
                 return WalletError.MaxFeeBreached;

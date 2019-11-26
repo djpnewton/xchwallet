@@ -139,14 +139,14 @@ namespace test
         [Verb("consolidate", HelpText = "Consolidate all funds from a range of tags")]
         class ConsolidateOptions : MinConfOptions
         { 
-            [Option('t', "tags", Required = true, HelpText = "Wallet tag(s) to spend from")]
+            [Option('t', "tags", HelpText = "Wallet tag(s) to spend from")]
             public string Tags { get; set; }
 
             [Option('T', "tagTo", Required = true, HelpText = "Recipient tag")]
             public string TagTo { get; set; }
 
-            [Option('a', "allExcluding", Default = false, HelpText = "All excluding the tags specified")]
-            public bool AllExcluding { get; set; }
+            [Option('a', "all", Default = false, HelpText = "Spend from all tags (except the recipient tag)")]
+            public bool All { get; set; }
 
             [Option("replace_txid", HelpText = "Double spend at least one input of this tx (only effects BTC)")]
             public string ReplaceTxId { get; set; }
@@ -602,12 +602,17 @@ namespace test
                 feeUnit = opts.FeeUnit;
             if (opts.FeeMax > 0)
                 feeMax = opts.FeeMax;
-            IEnumerable<string> tagList = opts.Tags.Split(',')
+            IEnumerable<string> tagList = new List<string>();
+            if (opts.Tags != null)
+                tagList = opts.Tags.Split(',')
                     .Select(m => { return m.Trim(); })
                     .ToList();
-            if (opts.AllExcluding)
-                tagList = wallet.GetTags().Where(t => tagList.Any(t2 => t2 != t.Tag)).Select(t => t.Tag);
+            if (opts.All)
+                tagList = wallet.GetTags().Where(t => t.Tag != opts.TagTo).Select(t => t.Tag);
+            Console.WriteLine(tagList.Count());
             EnsureTagExists(wallet, opts.TagTo);
+            foreach (var tag in tagList)
+                Console.WriteLine(tag);
             if (opts.ReplaceTxId != null)
                 wallet.SetTransactionStatus(opts.ReplaceTxId, ChainTxStatus.Ignored);
             var res = wallet.Consolidate(tagList, opts.TagTo, feeMax, feeUnit, out IEnumerable<WalletTx> wtxs, opts.MinimumConfirmations, opts.ReplaceTxId);
