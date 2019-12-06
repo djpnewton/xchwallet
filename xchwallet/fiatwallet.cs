@@ -4,9 +4,8 @@ using System.Text;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
-using Newtonsoft.Json;
-using WavesCS;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
@@ -44,6 +43,7 @@ namespace xchwallet
         long StringToAmount(string value);
         BankAccount GetAccount();
 
+        IDbContextTransaction BeginDbTransaction();
         void Save();
     }
 
@@ -237,6 +237,11 @@ namespace xchwallet
             var _scale = new decimal(1, 0, 0, false, 2);
             var d = decimal.Parse(value) / _scale;
             return (long)d;
+        }
+
+        public IDbContextTransaction BeginDbTransaction()
+        {
+            return db.Database.BeginTransaction();
         }
     }
 }

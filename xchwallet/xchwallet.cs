@@ -6,7 +6,6 @@ using System.Numerics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore.Storage;
-using Newtonsoft.Json;
 
 namespace xchwallet
 {
@@ -141,8 +140,8 @@ namespace xchwallet
         string AmountToString(BigInteger value);
         string AmountToString(decimal value);
         BigInteger StringToAmount(string value);
-        IDbContextTransaction BeginDbTransaction();
 
+        IDbContextTransaction BeginDbTransaction();
         void Save();
     }
 
