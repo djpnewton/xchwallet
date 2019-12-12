@@ -9,6 +9,9 @@
     - name: Install UFW
       apt: name=ufw state=latest
 
+    - name: Install mosh
+      apt: name=mosh state=latest
+
     - name: Configure ufw defaults
       ufw: direction={{ item.direction }} policy={{ item.policy }}
       with_items:
@@ -26,6 +29,7 @@
         proto: "{{item.proto}}"
       with_items:
         - { if: "{{if_external}}", rule: 'limit', direction: 'in', port: '{{ ssh_port | default("22") }}', proto: 'tcp' }
+        - { if: "{{if_external}}", rule: 'limit', direction: 'in', port: '60000:60020', proto: 'udp' }
         - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18332', proto: 'tcp' }
         - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '18333', proto: 'tcp' }
         - { if: "{{if_internal}}", rule: 'allow', direction: 'in', port: '24444', proto: 'tcp' }
