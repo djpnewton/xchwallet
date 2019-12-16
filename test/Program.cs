@@ -265,6 +265,14 @@ namespace test
             }
         }
 
+        struct WalletConfig
+        {
+            public string Node;
+            public string DbName;
+            public bool Mainnet;
+            public bool ShowSQL;
+        }
+
         static bool HasEnvVar(string name)
         {
             var vars = Environment.GetEnvironmentVariables();
@@ -284,39 +292,10 @@ namespace test
             return cmdValue;
         }
 
-        static WalletContext GetWalletContext(string dbNameOrConnString, bool logToConsole)
-        {
-            dbNameOrConnString = GetRequiredConfig("DBNAME", dbNameOrConnString);
-            if (dbNameOrConnString == null)
-                return null;
-
-            if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
-            {
-                var connString = dbNameOrConnString.Substring(5);
-                return BaseContext.CreateMySqlWalletContext<WalletContext>(connString, logToConsole, true);
-            }
-            else
-                return BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbNameOrConnString, logToConsole, true);
-        }
-
-        static string GetWalletType(string dbName)
-        {
-            using (var db = GetWalletContext(dbName, false))
-            {
-                if (db == null)
-                    return null;
-                return Util.GetWalletType(db);
-            }
-        }
-
-        static IWallet CreateWallet(string node, bool? mainnet, string dbName, string walletType, bool? showSql)
+        static WalletConfig GetWalletConfig(string node, bool? mainnet, string dbName, bool? showSql)
         {
             node = GetRequiredConfig("NODE", node);
-            if (node == null)
-                return null;
             dbName = GetRequiredConfig("DBNAME", dbName);
-            if (dbName == null)
-                return null;
             var mainnet_ = false;
             if (mainnet.HasValue)
                 mainnet_ = mainnet.Value;
@@ -327,23 +306,60 @@ namespace test
                 showSql_ = showSql.Value;
             else if (HasEnvVar("SHOWSQL"))
                 showSql_ = bool.Parse(Environment.GetEnvironmentVariable("SHOWSQL"));
+            return new WalletConfig { Node = node, DbName = dbName, Mainnet = mainnet_, ShowSQL = showSql_ };
+        }
 
+        static WalletContext GetWalletContext(string dbNameOrConnString, bool logToConsole, bool lazyLoading)
+        {
+            dbNameOrConnString = GetRequiredConfig("DBNAME", dbNameOrConnString);
+            if (dbNameOrConnString == null)
+                return null;
+
+            if (dbNameOrConnString != null && dbNameOrConnString.StartsWith("conn|"))
+            {
+                var connString = dbNameOrConnString.Substring(5);
+                return BaseContext.CreateMySqlWalletContext<WalletContext>(connString, logToConsole, true, lazyLoading);
+            }
+            else
+                return BaseContext.CreateMySqlWalletContext<WalletContext>("localhost", dbNameOrConnString, logToConsole, true, lazyLoading);
+        }
+
+        static IWallet2 CreateWalletFast(WalletConfig cfg, string walletType)
+        {
             walletType = walletType.ToUpper();
-            var network = mainnet_ ? "mainnet" : "testnet";
-            GetLogger().LogDebug($"Creating wallet ({walletType}) for {network} using db: '{dbName}', node: '{node}'");
+            var db = GetWalletContext(cfg.DbName, false, false);
+            return new FastWallet(GetLogger(), db, cfg.Mainnet, walletType);
+        }
+
+        static string GetWalletType(string dbName)
+        {
+            dbName = GetRequiredConfig("DBNAME", dbName);
+            using (var db = GetWalletContext(dbName, false, true))
+            {
+                if (db == null)
+                    return null;
+                return Util.GetWalletType(db);
+            }
+        }
+
+        static IWallet CreateWallet(WalletConfig cfg, string walletType)
+        {
+            walletType = walletType.ToUpper();
+            var network = cfg.Mainnet ? "mainnet" : "testnet";
+            GetLogger().LogDebug($"Creating wallet ({walletType}) for {network} using db: '{cfg.DbName}', node: '{cfg.Node}'");
 
             // create db context and apply migrations
-            var db = GetWalletContext(dbName, showSql_);
+            var db = GetWalletContext(cfg.DbName, cfg.ShowSQL, true);
             db.Database.Migrate();
 
             if (walletType == BtcWallet.TYPE)
-                return new BtcWallet(GetLogger(), db, mainnet_, new Uri(node));
+                return new BtcWallet(GetLogger(), db, cfg.Mainnet, new Uri(cfg.Node));
             else if (walletType == EthWallet.TYPE)
-                return new EthWallet(GetLogger(), db, mainnet_, node, "http://localhost:5001" /*TODO: get this from cmdline/env*/);
+                return new EthWallet(GetLogger(), db, cfg.Mainnet, cfg.Node, "http://localhost:5001" /*TODO: get this from cmdline/env*/);
             else if (walletType == WavWallet.TYPE)
-                return new WavWallet(GetLogger(), db, mainnet_, new Uri(node));
+                return new WavWallet(GetLogger(), db, cfg.Mainnet, new Uri(cfg.Node));
             else if (walletType == ZapWallet.TYPE)
-                return new ZapWallet(GetLogger(), db, mainnet_, new Uri(node));
+                return new ZapWallet(GetLogger(), db, cfg.Mainnet, new Uri(cfg.Node));
             else
                 throw new Exception("Wallet type not recognised");
         }
@@ -358,18 +374,21 @@ namespace test
             return tag_;
         }
 
-        static IWallet OpenWallet(CommonOptions opts)
+        static IWallet OpenWallet(CommonOptions opts, out IWallet2 walletFast)
         {
+            var cfg = GetWalletConfig(opts.Node, opts.Mainnet, opts.DbName, opts.ShowSql);
             var walletType = GetWalletType(opts.DbName);
-            var wallet = CreateWallet(opts.Node, opts.Mainnet, opts.DbName, walletType, opts.ShowSql);
+            var wallet = CreateWallet(cfg, walletType);
             if (wallet == null)
                 Console.WriteLine($"Unable to determine wallet type ({walletType})");
+            walletFast = CreateWalletFast(cfg, walletType);
             return wallet;
         }
 
         static int RunNew(NewOptions opts)
         {
-            var wallet = CreateWallet(opts.Node, opts.Mainnet, opts.DbName, opts.Type, opts.ShowSql);
+            var cfg = GetWalletConfig(opts.Node, opts.Mainnet, opts.DbName, opts.ShowSql);
+            var wallet = CreateWallet(cfg, opts.Type);
             if (wallet == null)
                 return 1;
             wallet.Save();
@@ -378,7 +397,7 @@ namespace test
 
         static int RunShow(ShowOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             /*
@@ -459,22 +478,25 @@ namespace test
 
         static int RunBalance(BalanceOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
+
             IEnumerable<string> tagList;
             if (opts.Tags != null)
                 tagList = opts.Tags.Split(',');
             else
                 tagList = wallet.GetTags().Select(t => t.Tag);
             var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
-            Console.WriteLine($"  balance: {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
+            Console.WriteLine($"  balance       : {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
+            balance = walletFast.GetBalance(tagList, opts.MinimumConfirmations);
+            Console.WriteLine($"  balance (fast): {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             return 0;
         }
 
         static int RunNewAddr(NewAddrOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             EnsureTagExists(wallet, opts.Tag);
@@ -515,7 +537,7 @@ namespace test
 
         static int RunPendingSpend(PendingSpendOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             EnsureTagExists(wallet, opts.Tag);
@@ -528,7 +550,7 @@ namespace test
 
         static int RunShowPending(ShowPendingOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             var states = new PendingSpendState[] { PendingSpendState.Pending, PendingSpendState.Error };
@@ -542,7 +564,7 @@ namespace test
 
         static int RunActionPending(ActionPendingOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             var feeUnit = new BigInteger(0);
@@ -558,7 +580,7 @@ namespace test
 
         static int RunCancelPending(CancelPendingOptions opts)
         {
-             var wallet = OpenWallet(opts);
+             var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             wallet.PendingSpendCancel(opts.SpendCode);
@@ -568,7 +590,7 @@ namespace test
 
         static int RunSpend(SpendOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             var feeUnit = new BigInteger(0);
@@ -592,7 +614,7 @@ namespace test
 
         static int RunConsolidate(ConsolidateOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             var feeUnit = new BigInteger(0);
@@ -627,7 +649,7 @@ namespace test
 
         static int RunShowUnAck(ShowUnAckOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             foreach (var tx in wallet.GetUnacknowledgedTransactions(opts.Tag))
@@ -637,7 +659,7 @@ namespace test
 
         static int RunAck(AckOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             var txs = wallet.GetUnacknowledgedTransactions(opts.Tag);
@@ -650,7 +672,7 @@ namespace test
 
         static int RunDeleteTx(DeleteTxOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             if (opts.TxId == "ALL")
@@ -665,7 +687,7 @@ namespace test
 
         static int RunSetNetworkStatus(SetNetworkStatusOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
             wallet.SetTransactionStatus(opts.TxId, opts.Status);
@@ -675,7 +697,7 @@ namespace test
 
         static int RunLoadTest(LoadTestOptions opts)
         {
-            var wallet = OpenWallet(opts);
+            var wallet = OpenWallet(opts, out var walletFast);
             if (wallet == null)
                 return 1;
 

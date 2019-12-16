@@ -17,10 +17,10 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace xchwallet
 {
 
-    public class EthWallet : BaseWallet
+    public class EthWallet : BaseFullWallet
     {
         public const string TYPE = "ETH";
-        protected override string _type()
+        public override string Type()
         {
             return TYPE;
         }
@@ -35,8 +35,6 @@ namespace xchwallet
 
         public EthWallet(ILogger logger, WalletContext db, bool mainnet, string gethAddress, string gethTxScanAddress) : base (logger, db, mainnet)
         {
-            this.logger = logger;
-
             // create HD wallet from seed
             wallet = new Wallet(Utils.ParseHexString(seedHex), PATH);
 
@@ -55,11 +53,6 @@ namespace xchwallet
             if (!mainnet)
                 if (netVersionTask.Result != "3")
                     throw new Exception("client is on wrong network");
-        }
-
-        public override bool IsMainnet()
-        {
-            return mainnet;
         }
 
         public override LedgerModel LedgerModel { get { return LedgerModel.Account; } }
@@ -186,28 +179,6 @@ namespace xchwallet
                     db.WalletTxs.Add(wtx);
                 }
             }
-        }
-
-        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return addr.Txs;
-        }
-
-        public override BigInteger GetBalance(string tag, int minConfs=0)
-        {
-            BigInteger total = 0;
-            foreach (var addr in db.AddrsGet(tag))
-                total += GetAddrBalance(addr);
-            return total;
-        }
-
-        public override BigInteger GetAddrBalance(string address, int minConfs=0)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return GetAddrBalance(addr, minConfs);
         }
 
         WalletError CreateSpendTx(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger gasPrice, BigInteger gasLimit, BigInteger feeMax,

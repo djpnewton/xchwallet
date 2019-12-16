@@ -44,7 +44,7 @@ namespace xchwallet
         {
             var optionsBuilder = new DbContextOptionsBuilder<WalletContext>();
             initOptionsBuilder(optionsBuilder);
-            return new WalletContext(optionsBuilder.Options, false);
+            return new WalletContext(optionsBuilder.Options, false, true);
         }
     }
 
@@ -54,7 +54,7 @@ namespace xchwallet
         {
             var optionsBuilder = new DbContextOptionsBuilder<FiatWalletContext>();
             initOptionsBuilder(optionsBuilder);
-            return new FiatWalletContext(optionsBuilder.Options, false);
+            return new FiatWalletContext(optionsBuilder.Options, false, true);
         }
     }
 
@@ -74,34 +74,38 @@ namespace xchwallet
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
         }
 
-        public static T CreateMySqlWalletContext<T>(string connString, bool logToConsole, bool sensitiveLogging)
+        public static T CreateMySqlWalletContext<T>(string connString, bool logToConsole, bool sensitiveLogging, bool lazyLoading)
             where T : DbContext
         {
             var optionsBuilder = new DbContextOptionsBuilder<T>();
             optionsBuilder.UseMySql(connString);
             optionsBuilder.EnableSensitiveDataLogging(sensitiveLogging);
-            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole });
+            return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole, lazyLoading });
         }
 
-        public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole, bool sensitiveLogging)
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, string uid, string pwd, bool logToConsole, bool sensitiveLogging, bool lazyLoading)
             where T : DbContext
         {
             var connString = $"host={host};database={dbName};uid={uid};password={pwd};";
-            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging);
+            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging, lazyLoading);
         }
 
-        public static T CreateMySqlWalletContext<T>(string host, string dbName, bool logToConsole, bool sensitiveLogging)
+        public static T CreateMySqlWalletContext<T>(string host, string dbName, bool logToConsole, bool sensitiveLogging, bool lazyLoading)
             where T : DbContext
         {
             var connString = $"host={host};database={dbName};";
-            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging);
+            return CreateMySqlWalletContext<T>(connString, logToConsole, sensitiveLogging, lazyLoading);
         }
 
-        bool logToConsole;
+        readonly bool logToConsole;
+        readonly bool lazyLoading;
 
-        public BaseContext(DbContextOptions options, bool logToConsole) : base(options)
+        public bool LazyLoading { get { return lazyLoading; } }
+
+        public BaseContext(DbContextOptions options, bool logToConsole, bool lazyLoading) : base(options)
         {
             this.logToConsole = logToConsole;
+            this.lazyLoading = lazyLoading;
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -114,7 +118,8 @@ namespace xchwallet
                     ;
                 optionsBuilder.UseLoggerFactory(loggerFactory);
             }
-            optionsBuilder.UseLazyLoadingProxies();
+            if (lazyLoading)
+                optionsBuilder.UseLazyLoadingProxies();
         }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -198,7 +203,7 @@ namespace xchwallet
             set { CfgSetInt("LastPathIndex", value); }
         }
 
-        public WalletContext(DbContextOptions<WalletContext> options, bool logToConsole) : base(options, logToConsole)
+        public WalletContext(DbContextOptions<WalletContext> options, bool logToConsole, bool lazyLoading) : base(options, logToConsole, lazyLoading)
         { }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -743,7 +748,7 @@ namespace xchwallet
         public DbSet<FiatWalletTag> WalletTags { get; set; }
         public DbSet<FiatWalletTx> WalletTxs { get; set; }
 
-        public FiatWalletContext(DbContextOptions<FiatWalletContext> options, bool logToConsole) : base(options, logToConsole)
+        public FiatWalletContext(DbContextOptions<FiatWalletContext> options, bool logToConsole, bool lazyLoading) : base(options, logToConsole, lazyLoading)
         { }
 
         protected override void OnModelCreating(ModelBuilder builder)

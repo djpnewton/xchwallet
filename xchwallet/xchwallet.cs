@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
@@ -28,7 +29,7 @@ namespace xchwallet
             var type = db.CfgGet(SEED_KEY);
             if (type != null)
                 return type.Value;
-            return null;  
+            return null;
         }
 
         public static bool? GetMainnet(WalletContext db)
@@ -66,7 +67,7 @@ namespace xchwallet
         Expired,     // possible account based chains that use timestamp                                   |  txs with these states are not counted when
         Invalid,     // violates a rule (maybe tries to spend funds that are already spent)                |  calculating balance (see ChainTx.Invalid())
         Ignored,     // we want to ignore this tx for whatever reason (maybe so we can double spend it)   /
-        
+
         //!! if you add a new entry make sure to update: ChainTx.Invalid() !!
     }
 
@@ -122,16 +123,16 @@ namespace xchwallet
         IEnumerable<ChainTx> GetChainTxs();
         void DeleteTransaction(string txid);
         void SetTransactionStatus(string txid, ChainTxStatus status);
-        BigInteger GetBalance(string tag, int minConfs=0);
-        BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0);
-        BigInteger GetAddrBalance(string address, int minConfs=0);
-        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor=null);
+        BigInteger GetBalance(string tag, int minConfs = 0);
+        BigInteger GetBalance(IEnumerable<string> tags, int minConfs = 0);
+        BigInteger GetAddrBalance(string address, int minConfs = 0);
+        WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor = null);
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs);
         void PendingSpendCancel(string spendCode);
-        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor=null);
+        IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor = null);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
-        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor=null, string replaceTxId=null);
-        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string ReplaceTxId = null);
+        WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor = null, string replaceTxId = null);
+        WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs = 0, string ReplaceTxId = null);
         IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address);
         IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag);
         void SeenTransaction(WalletTx tx);
@@ -145,33 +146,25 @@ namespace xchwallet
         void Save();
     }
 
-    public abstract class BaseWallet : IWallet
+    public interface IWallet2
     {
-        public abstract bool IsMainnet();
-        public abstract LedgerModel LedgerModel { get; }
-        public abstract WalletAddr NewAddress(string tag);
-        public abstract void UpdateFromBlockchain(IDbContextTransaction dbtx);
-        public abstract IEnumerable<WalletTx> GetAddrTransactions(string address);
-        public abstract BigInteger GetBalance(string tag, int minConfs=0);
-        public abstract BigInteger GetAddrBalance(string address, int minConfs=0);
-        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf=null, string ReplaceTxId = null);
-        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs=0, string ReplaceTxId = null);
-        public abstract string AmountToString(BigInteger value);
-        public abstract string AmountToString(decimal value);
-        public abstract BigInteger StringToAmount(string value);
-        public abstract bool ValidateAddress(string address);
+        BigInteger GetBalance(int minConfs = 0);
+        BigInteger GetBalance(string tag, int minConfs = 0);
+        BigInteger GetBalance(IEnumerable<string> tags, int minConfs = 0);
+    }
 
-        protected abstract string _type();
+    public abstract class BaseWallet
+    {
+        readonly protected ILogger logger;
+        readonly protected WalletContext db;
+        protected string seedHex;
+        readonly protected bool mainnet;
+        readonly protected string _type_;
 
-        protected ILogger logger = null;
-        protected WalletContext db = null;
-        protected string seedHex = null;
-        protected bool mainnet = false;
-
-        public LedgerModel GetLedgerModel()
+        public bool IsMainnet()
         {
-            return LedgerModel;
-        } 
+            return mainnet;
+        }
 
         void CheckType()
         {
@@ -192,7 +185,7 @@ namespace xchwallet
                 logger.LogDebug("New wallet, initializing seed..");
                 using (RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider())
                 {
-                    var data = new byte[256/8];
+                    var data = new byte[256 / 8];
                     rng.GetBytes(data);
                     seedHex = BitConverter.ToString(data).Replace("-", string.Empty);
                 }
@@ -209,11 +202,12 @@ namespace xchwallet
                 throw new Exception($"Mainnet found in db ({mainnet.Value}) does not match this wallet class ({IsMainnet()})");
         }
 
-        public BaseWallet(ILogger logger, WalletContext db, bool mainnet)
+        public BaseWallet(ILogger logger, WalletContext db, bool mainnet, string type)
         {
             this.logger = logger;
             this.db = db;
             this.mainnet = mainnet;
+            this._type_ = type;
             CheckType();
             CheckSeed();
             CheckMainnet();
@@ -227,9 +221,32 @@ namespace xchwallet
             db.SaveChanges();
         }
 
-        public string Type()
+        public virtual string Type()
         {
-            return _type();
+            return this._type_;
+        }
+    }
+
+    public abstract class BaseFullWallet : BaseWallet, IWallet
+    {
+        public abstract LedgerModel LedgerModel { get; }
+        public abstract WalletAddr NewAddress(string tag);
+        public abstract void UpdateFromBlockchain(IDbContextTransaction dbtx);
+        public abstract WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagOnBehalfOf = null, string ReplaceTxId = null);
+        public abstract WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs = 0, string ReplaceTxId = null);
+        public abstract string AmountToString(BigInteger value);
+        public abstract string AmountToString(decimal value);
+        public abstract BigInteger StringToAmount(string value);
+        public abstract bool ValidateAddress(string address);
+
+        public BaseFullWallet(ILogger logger, WalletContext db, bool mainnet) : base(logger, db, mainnet, null)
+        {
+            System.Diagnostics.Debug.Assert(db.LazyLoading == true);
+        }
+
+        public LedgerModel GetLedgerModel()
+        {
+            return LedgerModel;
         }
 
         public WalletTag GetTag(string tag)
@@ -254,7 +271,7 @@ namespace xchwallet
 
         public WalletTag NewTag(string tag)
         {
-            var tag_ = new WalletTag{ Tag = tag };
+            var tag_ = new WalletTag { Tag = tag };
             db.WalletTags.Add(tag_);
             return tag_;
         }
@@ -298,6 +315,13 @@ namespace xchwallet
             return db.TxsGet(tag);
         }
 
+        public IEnumerable<WalletTx> GetAddrTransactions(string address)
+        {
+            var addr = db.AddrGet(address);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
+            return addr.Txs;
+        }
+
         public void DeleteTransaction(string txid)
         {
             db.TxDelete(txid);
@@ -321,7 +345,15 @@ namespace xchwallet
             }
         }
 
-        public BigInteger GetBalance(IEnumerable<string> tags, int minConfs=0)
+        public BigInteger GetBalance(string tag, int minConfs = 0)
+        {
+            BigInteger total = 0;
+            foreach (var addr in db.AddrsGet(tag))
+                total += GetAddrBalance(addr, minConfs);
+            return total;
+        }
+
+        public BigInteger GetBalance(IEnumerable<string> tags, int minConfs = 0)
         {
             BigInteger amount = 0;
             foreach (var tag in tags)
@@ -329,12 +361,19 @@ namespace xchwallet
             return amount;
         }
 
-        public BigInteger GetAddrBalance(WalletAddr addr, int minConfs=0)
+        public BigInteger GetAddrBalance(string address, int minConfs = 0)
+        {
+            var addr = db.AddrGet(address);
+            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
+            return GetAddrBalance(addr, minConfs);
+        }
+
+        public BigInteger GetAddrBalance(WalletAddr addr, int minConfs = 0)
         {
             return addr.Balance(minConfs);
         }
 
-        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor=null)
+        public WalletPendingSpend RegisterPendingSpend(string tag, string tagChange, string to, BigInteger amount, WalletTag tagFor = null)
         {
             if (!ValidateAddress(to))
                 return null;
@@ -346,7 +385,7 @@ namespace xchwallet
             var tagChange_ = db.TagGet(tagChange);
             Util.WalletAssert(tagChange_ != null, $"Tag '{tagChange}' does not exist");
             var date = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var spend = new WalletPendingSpend{ SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
+            var spend = new WalletPendingSpend { SpendCode = spendCode, Date = date, State = PendingSpendState.Pending, Tag = tag_, TagChange = tagChange_, To = to, Amount = amount };
             spend.TagFor = tagFor;
             db.WalletPendingSpends.Add(spend);
             if (tagFor != null)
@@ -385,7 +424,7 @@ namespace xchwallet
             db.WalletPendingSpends.Update(spend);
         }
 
-        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor=null)
+        public IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor = null)
         {
             if (tag != null)
             {
@@ -413,7 +452,7 @@ namespace xchwallet
         {
             return db.TxsUnAckedGet(address);
         }
-        
+
         public IEnumerable<WalletTx> GetUnacknowledgedTransactions(string tag)
         {
             var txs = new List<WalletTx>();
@@ -445,6 +484,52 @@ namespace xchwallet
         public IDbContextTransaction BeginDbTransaction()
         {
             return db.Database.BeginTransaction();
+        }
+    }
+
+    public class FastWallet : BaseWallet, IWallet2
+    {
+        public FastWallet(ILogger logger, WalletContext db, bool mainnet, string type) : base(logger, db, mainnet, type)
+        {
+            System.Diagnostics.Debug.Assert(db.LazyLoading == false);
+        }
+
+        private static BigInteger AddrsBalance(IQueryable<WalletAddr> addrs, int minConfs)
+        {
+            var balance = BigInteger.Zero;
+            foreach (var addr in addrs)
+                balance += addr.Balance(minConfs);
+            return balance;
+        }
+
+        public BigInteger GetBalance(int minConfs = 0)
+        {
+            var allAddrs = db.WalletTags.SelectMany(t => t.Addrs)
+                .Include(addr => addr.TxInputs)
+                    .ThenInclude(i => i.ChainTx)
+                .Include(addr => addr.TxOutputs)
+                    .ThenInclude(i => i.ChainTx);
+            return AddrsBalance(allAddrs, minConfs);
+        }
+
+        public BigInteger GetBalance(string tag, int minConfs = 0)
+        {
+            var addrs = db.WalletTags.Where(t => t.Tag == tag).SelectMany(t => t.Addrs)
+                .Include(addr => addr.TxInputs)
+                    .ThenInclude(i => i.ChainTx)
+                .Include(addr => addr.TxOutputs)
+                    .ThenInclude(i => i.ChainTx);
+            return AddrsBalance(addrs, minConfs);
+        }
+
+        public BigInteger GetBalance(IEnumerable<string> tags, int minConfs = 0)
+        {
+            var addrs = db.WalletTags.Where(t => tags.Contains(t.Tag)).SelectMany(t => t.Addrs)
+                .Include(addr => addr.TxInputs)
+                    .ThenInclude(i => i.ChainTx)
+                .Include(addr => addr.TxOutputs)
+                    .ThenInclude(i => i.ChainTx);
+            return AddrsBalance(addrs, minConfs);
         }
     }
 }

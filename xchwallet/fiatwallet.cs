@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
@@ -47,12 +48,19 @@ namespace xchwallet
         void Save();
     }
 
-    public class FiatWallet : IFiatWallet
+    public interface IFiatWallet2
     {
-        protected ILogger logger = null;
-        protected FiatWalletContext db = null;
-        protected string type = null;
-        protected BankAccount account = null;
+        long GetBalance();
+        long GetBalance(string tag);
+        long GetBalance(IEnumerable<string> tags);
+    }
+
+    public abstract class BaseFiatWallet
+    {
+        readonly protected ILogger logger = null;
+        readonly protected FiatWalletContext db = null;
+        readonly protected string type = null;
+        readonly protected BankAccount account = null;
 
         void CheckType()
         {
@@ -64,7 +72,7 @@ namespace xchwallet
                 throw new Exception($"Type found in db ({type}) does not match this wallet class ({Type()})");
         }
 
-        public FiatWallet(ILogger logger, FiatWalletContext db, string type, BankAccount account)
+        public BaseFiatWallet(ILogger logger, FiatWalletContext db, string type, BankAccount account)
         {
             this.logger = logger;
             this.db = db;
@@ -84,6 +92,14 @@ namespace xchwallet
         public string Type()
         {
             return type;
+        }
+    }
+
+    public class FiatWallet : BaseFiatWallet, IFiatWallet
+    {
+        public FiatWallet(ILogger logger, FiatWalletContext db, string type, BankAccount account) : base(logger, db, type, account)
+        {
+            System.Diagnostics.Debug.Assert(db.LazyLoading == true);
         }
 
         public IEnumerable<FiatWalletTag> GetTags()
@@ -242,6 +258,43 @@ namespace xchwallet
         public IDbContextTransaction BeginDbTransaction()
         {
             return db.Database.BeginTransaction();
+        }
+    }
+
+    public class FastFiatWallet : BaseFiatWallet, IFiatWallet2
+    {
+        public FastFiatWallet(ILogger logger, FiatWalletContext db, string type, BankAccount account) : base(logger, db, type, account)
+        {
+            System.Diagnostics.Debug.Assert(db.LazyLoading == false);
+        }
+
+        private static long TxsBalance(IQueryable<FiatWalletTx> txs)
+        {
+            long balance = 0;
+            foreach (var tx in txs)
+                balance += tx.Direction == WalletDirection.Incomming ? (tx.BankTx != null ? tx.Amount : 0) : -tx.Amount;
+            return balance;
+        }
+
+        public long GetBalance()
+        {
+            var allTxs = db.WalletTags.SelectMany(t => t.Txs)
+                .Include(tx => tx.BankTx);
+            return TxsBalance(allTxs);
+        }
+
+        public long GetBalance(string tag)
+        {
+            var txs = db.WalletTags.Where(t => t.Tag == tag).SelectMany(t => t.Txs)
+                .Include(tx => tx.BankTx);
+            return TxsBalance(txs);
+        }
+
+        public long GetBalance(IEnumerable<string> tags)
+        {
+            var txs = db.WalletTags.Where(t => tags.Contains(t.Tag)).SelectMany(t => t.Txs)
+                .Include(tx => tx.BankTx);
+            return TxsBalance(txs);
         }
     }
 }

@@ -10,10 +10,10 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace xchwallet
 {
-    public class WavWallet : BaseWallet
+    public class WavWallet : BaseFullWallet
     {
         public const string TYPE = "WAVES";
-        protected override string _type()
+        public override string Type()
         {
             return TYPE;
         }
@@ -38,17 +38,10 @@ namespace xchwallet
 
         public WavWallet(ILogger logger, WalletContext db, bool mainnet, Uri nodeAddress) : base(logger, db, mainnet)
         {
-            this.logger = logger;
-
             this.node = new Node(nodeAddress.ToString(), ChainId());
             this.assetId = Assets.WAVES.Id;
             this.asset = Assets.WAVES;
             this.feeAsset = this.asset;
-        }
-
-        public override bool IsMainnet()
-        {
-            return mainnet;
         }
 
         public override LedgerModel LedgerModel { get { return LedgerModel.Account; } }
@@ -281,28 +274,6 @@ namespace xchwallet
             }
         }
 
-        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return addr.Txs;
-        }
-
-        public override BigInteger GetBalance(string tag, int minConfs=0)
-        {
-            BigInteger total = 0;
-            foreach (var addr in db.AddrsGet(tag))
-                total += GetAddrBalance(addr, minConfs);
-            return total;
-        }
-
-        public override BigInteger GetAddrBalance(string address, int minConfs=0)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return GetAddrBalance(addr, minConfs);
-        }
-
         WalletError CreateSpendTx(IEnumerable<WalletAddr> candidates, string to, BigInteger amount, BigInteger fee, BigInteger feeMax,
             out Tuple<string, TransferTransaction> signedSpendTx)
         {
@@ -530,7 +501,7 @@ namespace xchwallet
     public class ZapWallet : WavWallet
     {
         public new const string TYPE = "ZAP";
-        protected override string _type()
+        public override string Type()
         {
             return TYPE;
         }

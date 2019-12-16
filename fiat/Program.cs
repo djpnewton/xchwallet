@@ -109,7 +109,7 @@ namespace fiat
 
         static string GetWalletType(string dbName)
         {
-            using (var db = BaseContext.CreateMySqlWalletContext<FiatWalletContext>("localhost", dbName, false, false))
+            using (var db = BaseContext.CreateMySqlWalletContext<FiatWalletContext>(dbName, false, false, false))
                 return Util.GetWalletType(db);
         }
 
@@ -118,7 +118,7 @@ namespace fiat
             GetLogger().LogDebug("Creating wallet ({0}) for testnet using db: '{1}'", walletType, dbName);
 
             // create db context and apply migrations
-            var db = BaseContext.CreateMySqlWalletContext<FiatWalletContext>("localhost", dbName, showSql, false);
+            var db = BaseContext.CreateMySqlWalletContext<FiatWalletContext>(dbName, showSql, false, false);
             db.Database.Migrate();
             // add dummy bank account
             var account = new BankAccount{ BankName="Example Bank Inc.", BankAddress="1 Banking Street\nBanktown\n3245\nBankcountry", AccountName="Wallets Inc.", AccountNumber="22-4444-7777777-22"};

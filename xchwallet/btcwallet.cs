@@ -72,10 +72,10 @@ namespace xchwallet
         public string BlockHash { get; set; }
     }
 
-    public class BtcWallet : BaseWallet
+    public class BtcWallet : BaseFullWallet
     {
         public const string TYPE = "BTC";
-        protected override string _type()
+        public override string Type()
         {
             return TYPE;
         }
@@ -111,7 +111,6 @@ namespace xchwallet
 
         public BtcWallet(ILogger logger, WalletContext db, bool mainnet, Uri nbxplorerAddress, bool useLegacyAddrs=false) : base(logger, db, mainnet)
         {
-            this.logger = logger;
             this.nbxplorerAddress = nbxplorerAddress;
 
             // create extended key
@@ -121,11 +120,6 @@ namespace xchwallet
             if (useLegacyAddrs)
                 strpubkey = strpubkey + "-[legacy]";
             pubkey = (DirectDerivationStrategy)new DerivationStrategyFactory(network).Parse(strpubkey);
-        }
-
-        public override bool IsMainnet()
-        {
-            return mainnet;
         }
 
         public override LedgerModel LedgerModel { get { return LedgerModel.UTXO; } }
@@ -279,28 +273,6 @@ namespace xchwallet
         {
             var txs = GetClient().GetTransactions(derivationStrat);
             UpdateTxConfirmations(txs);
-        }
-
-        public override IEnumerable<WalletTx> GetAddrTransactions(string address)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return addr.Txs;
-        }
-
-        public override BigInteger GetBalance(string tag, int minConfs=0)
-        {
-            BigInteger total = 0;
-            foreach (var addr in db.AddrsGet(tag))
-                total += GetAddrBalance(addr, minConfs);
-            return total;
-        }
-
-        public override BigInteger GetAddrBalance(string address, int minConfs=0)
-        {
-            var addr = db.AddrGet(address);
-            Util.WalletAssert(addr != null, $"Address '{address}' does not exist");
-            return GetAddrBalance(addr, minConfs);
         }
 
         public BitcoinAddress AddChangeAddress(WalletTag tag)
