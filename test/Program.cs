@@ -262,6 +262,15 @@ namespace test
                 foreach (var output in ctx.TxOutputs)
                     Console.WriteLine($"    {output.Addr}, {output.N}, {output.Amount}");
                 Console.WriteLine($"    total: {ctx.AmountOutputs()}");
+
+                Console.WriteLine($"  network status:");
+                Console.WriteLine($"    status: {ctx.NetworkStatus.Status}");
+                Console.WriteLine($"    date last broadcast: {ctx.NetworkStatus.DateLastBroadcast}");
+                if (ctx.NetworkStatus.TxBin != null)
+                {
+                    var hex = BitConverter.ToString(ctx.NetworkStatus.TxBin).Replace("-", "");
+                    Console.WriteLine($"    txbin: {hex}");
+                }
             }
         }
 
