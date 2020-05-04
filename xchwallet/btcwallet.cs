@@ -192,7 +192,7 @@ namespace xchwallet
             var o = db.TxOutputGet(id, utxo.Outpoint.N);
             if (o == null)
             {
-                o = new TxOutput(id, address.Address, utxo.Outpoint.N, utxo.Value.Satoshi);
+                o = new TxOutput(id, address.Address, utxo.Outpoint.N, utxo.AsCoin().Amount.Satoshi);
                 o.ChainTx = ctx;
                 o.WalletAddr = address;
                 db.TxOutputs.Add(o);
@@ -355,8 +355,8 @@ namespace xchwallet
         {
             // sign tx before calculating fee so it includes signatures
             var coins = from a in toBeSpent select a.Coin;
-            var keys = from a in toBeSpent select a.Key;
-            tx.Sign(keys.ToArray(), coins.ToArray());
+            var keys = from a in toBeSpent select new BitcoinSecret(a.Key, GetNetwork());
+            tx.Sign(keys, coins);
             return tx.GetFeeRate(coins.ToArray());
         }
 
@@ -506,11 +506,11 @@ namespace xchwallet
                 return WalletError.InsufficientFunds;
             }
             var coins = from a in toBeSpent select a.Coin;
-            var keys = from a in toBeSpent select a.Key;
+            var keys = from a in toBeSpent select new BitcoinSecret(a.Key, GetNetwork());
             // check coins are represented as incoming wallet txs
             CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
             // sign inputs (after adding a change output)
-            tx.Sign(keys.ToArray(), coins.ToArray());
+            tx.Sign(keys, coins);
             // recalculate fee rate and check it is less then the max fee
             var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)
@@ -612,10 +612,10 @@ namespace xchwallet
             }
             // sign inputs
             var coins = from a in toBeSpent select a.Coin;
-            var keys = from a in toBeSpent select a.Key;
+            var keys = from a in toBeSpent select new BitcoinSecret(a.Key, GetNetwork());
             // check coins are represented as incoming wallet txs
             CheckCoinsAreInWallet(candidates, utxos.CurrentHeight);
-            tx.Sign(keys.ToArray(), coins.ToArray());
+            tx.Sign(keys, coins);
             // recalculate fee rate and check it is less then the max fee
             var fee = tx.GetFee(coins.ToArray());
             if (fee.Satoshi > feeMax)

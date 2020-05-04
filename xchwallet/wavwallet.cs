@@ -64,8 +64,8 @@ namespace xchwallet
         {
             System.Diagnostics.Debug.Assert(dbtx != null);
             var blockHeight = (long)node.GetObject("blocks/height")["height"];
-            foreach (var tag in GetTags())
-                foreach (var addr in tag.Addrs)
+            foreach (var tag in GetTags().ToList())
+                foreach (var addr in tag.Addrs.ToList())
                 {
                     UpdateTxs(addr, blockHeight, updateInputsAndOutputs);
                     db.SaveChanges();

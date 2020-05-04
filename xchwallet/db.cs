@@ -112,11 +112,10 @@ namespace xchwallet
         {
             if (logToConsole)
             {
-                var loggerFactory = new LoggerFactory()
-                    .AddDebug((categoryName, logLevel) => (logLevel == LogLevel.Information) && (categoryName == DbLoggerCategory.Database.Command.Name))
-                    .AddConsole((categoryName, logLevel) => (logLevel == LogLevel.Information) && (categoryName == DbLoggerCategory.Database.Command.Name))
-                    ;
-                optionsBuilder.UseLoggerFactory(loggerFactory);
+                var factory = LoggerFactory.Create(builder => {
+                    builder.AddConsole().AddFilter(level => level >= LogLevel.Debug);
+                });
+                optionsBuilder.UseLoggerFactory(factory);
             }
             if (lazyLoading)
                 optionsBuilder.UseLazyLoadingProxies();

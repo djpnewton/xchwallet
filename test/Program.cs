@@ -203,7 +203,9 @@ namespace test
         {
             if (_logger == null)
             {
-                var factory = new LoggerFactory().AddConsole(LogLevel.Debug).AddFile("test.log", minimumLevel: LogLevel.Debug);
+                var factory = LoggerFactory.Create(builder => {
+                    builder.AddConsole().AddFilter(level => level >= LogLevel.Debug).AddFile("test.log", minimumLevel: LogLevel.Debug);
+                });
                 _logger = factory.CreateLogger("main");
             }
             return _logger;
@@ -212,13 +214,11 @@ namespace test
         static void PrintWallet(IWallet wallet, int minConfs, int MaxTxs)
         {
             BigInteger totalBalance = 0;
-            foreach (var tag in wallet.GetTags())
+            foreach (var tag in wallet.GetTags().ToList())
             {
                 Console.WriteLine($"{tag.Tag}:");
-                var addrs = tag.Addrs;
                 Console.WriteLine("  addrs:");
-                addrs = tag.Addrs;
-                foreach (var addr in addrs)
+                foreach (var addr in tag.Addrs)
                     Console.WriteLine($"    {addr.Address}");
                 Console.WriteLine("  txs:");
                 var txs = wallet.GetTransactions(tag.Tag).OrderByDescending(tx => tx.ChainTx.Date).Take(MaxTxs);

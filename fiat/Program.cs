@@ -90,7 +90,9 @@ namespace fiat
         {
             if (_logger == null)
             {
-                var factory = new LoggerFactory().AddConsole(LogLevel.Debug).AddFile("fiat.log", minimumLevel: LogLevel.Debug);
+                var factory = LoggerFactory.Create(builder => {
+                    builder.AddConsole().AddFilter(level => level >= LogLevel.Debug).AddFile("fiat.log", minimumLevel: LogLevel.Debug);
+                });
                 _logger = factory.CreateLogger("main");
             }
             return _logger;

@@ -260,17 +260,17 @@ namespace xchwallet
             var amount = HexBigIntegerConvertorExtensions.HexToBigInteger(tx.Value.ToHex(), false);
             logger.LogDebug("outgoing tx: amount: {0}, fee: {1}", amount, fee);
             // create chain tx
-            var ctx = new ChainTx(tx.Hash.ToHex(true), date, fee, -1, 0);
+            var ctx = new ChainTx(tx.RawHash.ToHex(true), date, fee, -1, 0);
             db.ChainTxs.Add(ctx);
             var networkStatus = new ChainTxNetworkStatus(ctx, ChainTxStatus.Unconfirmed, date, signedTx.HexToByteArray());
             db.ChainTxNetworkStatus.Add(networkStatus);
             // create tx input
-            var i = new TxInput(tx.Hash.ToHex(true), from, 0, amount + fee);
+            var i = new TxInput(tx.RawHash.ToHex(true), from, 0, amount + fee);
             i.ChainTx = ctx;
             i.WalletAddr = address;
             db.TxInputs.Add(i);
             // create tx output
-            var o = new TxOutput(tx.Hash.ToHex(true), tx.ReceiveAddress.ToHex(true), 0, amount);
+            var o = new TxOutput(tx.RawHash.ToHex(true), tx.ReceiveAddress.ToHex(true), 0, amount);
             o.ChainTx = ctx;
             db.TxOutputs.Add(o);
             if (tagFor != null)
