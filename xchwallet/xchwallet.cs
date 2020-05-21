@@ -130,6 +130,7 @@ namespace xchwallet
         WalletError PendingSpendAction(string spendCode, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs);
         void PendingSpendCancel(string spendCode);
         IEnumerable<WalletPendingSpend> PendingSpendsGet(string tag = null, IEnumerable<PendingSpendState> states = null, string tagFor = null);
+        WalletPendingSpend PendingSpendGet(string spendCode);
         // feeUnit is wallet specific, in BTC it is satoshis per byte, in ETH it is GWEI per gas, in Waves it is a fixed transaction fee
         WalletError Spend(string tag, string tagChange, string to, BigInteger amount, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, WalletTag tagFor = null, string replaceTxId = null);
         WalletError Consolidate(IEnumerable<string> tagFrom, string tagTo, BigInteger feeMax, BigInteger feeUnit, out IEnumerable<WalletTx> wtxs, int minConfs = 0, string ReplaceTxId = null);
@@ -446,6 +447,11 @@ namespace xchwallet
                 else
                     return db.WalletPendingSpends;
             }
+        }
+
+        public WalletPendingSpend PendingSpendGet(string spendCode)
+        {
+            return db.PendingSpendGet(spendCode);
         }
 
         public IEnumerable<WalletTx> GetAddrUnacknowledgedTransactions(string address)
