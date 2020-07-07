@@ -27,7 +27,7 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("bigint");
 
                     b.Property<string>("BankMetadata")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<long>("Date")
                         .HasColumnType("bigint");
@@ -44,7 +44,7 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("int");
 
                     b.Property<string>("Tag")
-                        .HasColumnType("varchar(255) CHARACTER SET utf8mb4");
+                        .HasColumnType("varchar(255)");
 
                     b.HasKey("Id");
 
@@ -61,19 +61,19 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("int");
 
                     b.Property<string>("AccountName")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("AccountNumber")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<long>("Amount")
                         .HasColumnType("bigint");
 
                     b.Property<string>("BankAddress")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("BankName")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<int?>("BankTxId")
                         .HasColumnType("int");
@@ -82,7 +82,7 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("bigint");
 
                     b.Property<string>("DepositCode")
-                        .HasColumnType("varchar(255) CHARACTER SET utf8mb4");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<int>("Direction")
                         .HasColumnType("int");
@@ -109,16 +109,16 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("int");
 
                     b.Property<string>("Code")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<int>("FiatWalletTxId")
                         .HasColumnType("int");
 
                     b.Property<string>("Particulars")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Reference")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 
@@ -135,10 +135,10 @@ namespace xchwallet.Migrations.FiatWallet
                         .HasColumnType("int");
 
                     b.Property<string>("Key")
-                        .HasColumnType("varchar(255) CHARACTER SET utf8mb4");
+                        .HasColumnType("varchar(255)");
 
                     b.Property<string>("Value")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
+                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 

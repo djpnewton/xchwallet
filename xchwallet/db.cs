@@ -31,7 +31,7 @@ namespace xchwallet
                     optionsBuilder.UseSqlite(connection);
                     break;
                 case "mysql":
-                    optionsBuilder.UseMySql(connection);
+                    optionsBuilder.UseMySql(connection, b => b.CharSetBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.CharSetBehavior.NeverAppend));
                     break;
                 default:
                     throw new System.ArgumentException($"unknown DB_TYPE '{dbtype}'");
@@ -78,7 +78,7 @@ namespace xchwallet
             where T : DbContext
         {
             var optionsBuilder = new DbContextOptionsBuilder<T>();
-            optionsBuilder.UseMySql(connString);
+            optionsBuilder.UseMySql(connString, b => b.CharSetBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.CharSetBehavior.NeverAppend));
             optionsBuilder.EnableSensitiveDataLogging(sensitiveLogging);
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole, lazyLoading });
         }
