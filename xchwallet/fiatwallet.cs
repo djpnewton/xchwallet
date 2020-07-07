@@ -32,11 +32,12 @@ namespace xchwallet
         long GetBalance(string tag);
         FiatWalletTx RegisterPendingDeposit(string tag, long amount);
         FiatWalletTx UpdateDeposit(string depositCode, long date, long amount, string bankMetadata);
-        FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account);
+        FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account, RecipientParams recipientParams = null);
         FiatWalletTx UpdateWithdrawal(string depositCode, long date, long amount, string bankMetadata);
         FiatWalletTx GetTx(string depositCode);
         IEnumerable<FiatWalletTx> GetPendingDeposits();
         IEnumerable<FiatWalletTx> GetPendingWithdrawals();
+        RecipientParams GetRecipientParams(FiatWalletTx tx);
         long AmountToLong(decimal value);
         decimal AmountToDecimal(long value);
         string AmountToString(long value);
@@ -176,7 +177,7 @@ namespace xchwallet
             return tx;
         }
 
-        public FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account)
+        public FiatWalletTx RegisterPendingWithdrawal(string tag, long amount, BankAccount account, RecipientParams recipientParams = null)
         {
             var depositCode = Utils.CreateDepositCode();
             while (db.TxGet(depositCode) != null)
@@ -186,6 +187,12 @@ namespace xchwallet
             var tx = new FiatWalletTx { DepositCode=depositCode, Tag=_tag, Date=date, Direction=WalletDirection.Outgoing, Amount=amount,
                 BankName=account.BankName, BankAddress=account.BankAddress, AccountName=account.AccountName, AccountNumber=account.AccountNumber };
             db.WalletTxs.Add(tx);
+            if (recipientParams != null)
+            {
+                db.RecipientParams.Add(recipientParams);
+                // use temporary value generated on add (https://docs.microsoft.com/en-us/ef/core/modeling/generated-properties?tabs=data-annotations#value-generated-on-add)
+                recipientParams.FiatWalletTxId = tx.Id;
+            }
             return tx;
         }
 
@@ -220,6 +227,11 @@ namespace xchwallet
         public IEnumerable<FiatWalletTx> GetPendingWithdrawals()
         {
             return db.TxsGet(WalletDirection.Outgoing, false);
+        }
+
+        public RecipientParams GetRecipientParams(FiatWalletTx tx)
+        {
+            return db.RecipientParamsGet(tx);
         }
 
         public BankAccount GetAccount()

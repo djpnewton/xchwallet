@@ -743,6 +743,7 @@ namespace xchwallet
 
     public class FiatWalletContext : BaseContext
     {
+        public DbSet<RecipientParams> RecipientParams { get; set; }
         public DbSet<BankTx> BankTxs { get; set; }
         public DbSet<FiatWalletTag> WalletTags { get; set; }
         public DbSet<FiatWalletTx> WalletTxs { get; set; }
@@ -753,6 +754,10 @@ namespace xchwallet
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            builder.Entity<RecipientParams>()
+                .HasIndex(t => t.FiatWalletTxId)
+                .IsUnique();
 
             builder.Entity<FiatWalletTag>()
                 .HasIndex(t => t.Tag)
@@ -804,6 +809,20 @@ namespace xchwallet
         {
             return WalletTxs.SingleOrDefault(t => t.DepositCode == depositCode);
         }
+
+        public RecipientParams RecipientParamsGet(FiatWalletTx tx)
+        {
+            return RecipientParams.SingleOrDefault(r => r.FiatWalletTxId == tx.Id);
+        }
+    }
+
+    public class RecipientParams
+    {
+        public int Id { get; set; }
+        public int FiatWalletTxId { get; set; }
+        public string Reference { get; set; }
+        public string Code { get; set; }
+        public string Particulars { get; set; }
     }
 
     public class BankTx
