@@ -820,6 +820,7 @@ namespace xchwallet
     {
         public int Id { get; set; }
         public int FiatWalletTxId { get; set; }
+        public virtual FiatWalletTx FiatWalletTx { get; set; }
         public string Reference { get; set; }
         public string Code { get; set; }
         public string Particulars { get; set; }

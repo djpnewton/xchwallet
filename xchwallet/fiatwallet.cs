@@ -189,9 +189,8 @@ namespace xchwallet
             db.WalletTxs.Add(tx);
             if (recipientParams != null)
             {
+                recipientParams.FiatWalletTx = tx;
                 db.RecipientParams.Add(recipientParams);
-                // use temporary value generated on add (https://docs.microsoft.com/en-us/ef/core/modeling/generated-properties?tabs=data-annotations#value-generated-on-add)
-                recipientParams.FiatWalletTxId = tx.Id;
             }
             return tx;
         }
