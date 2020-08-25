@@ -31,7 +31,7 @@ namespace xchwallet
                     optionsBuilder.UseSqlite(connection);
                     break;
                 case "mysql":
-                    optionsBuilder.UseMySql(connection);
+                    optionsBuilder.UseMySql(connection, b => b.CharSetBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.CharSetBehavior.NeverAppend));
                     break;
                 default:
                     throw new System.ArgumentException($"unknown DB_TYPE '{dbtype}'");
@@ -78,7 +78,7 @@ namespace xchwallet
             where T : DbContext
         {
             var optionsBuilder = new DbContextOptionsBuilder<T>();
-            optionsBuilder.UseMySql(connString);
+            optionsBuilder.UseMySql(connString, b => b.CharSetBehavior(Pomelo.EntityFrameworkCore.MySql.Infrastructure.CharSetBehavior.NeverAppend));
             optionsBuilder.EnableSensitiveDataLogging(sensitiveLogging);
             return (T)Activator.CreateInstance(typeof(T), new object[] { optionsBuilder.Options, logToConsole, lazyLoading });
         }
@@ -743,6 +743,7 @@ namespace xchwallet
 
     public class FiatWalletContext : BaseContext
     {
+        public DbSet<RecipientParams> RecipientParams { get; set; }
         public DbSet<BankTx> BankTxs { get; set; }
         public DbSet<FiatWalletTag> WalletTags { get; set; }
         public DbSet<FiatWalletTx> WalletTxs { get; set; }
@@ -753,6 +754,10 @@ namespace xchwallet
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
+            builder.Entity<RecipientParams>()
+                .HasIndex(t => t.FiatWalletTxId)
+                .IsUnique();
 
             builder.Entity<FiatWalletTag>()
                 .HasIndex(t => t.Tag)
@@ -804,6 +809,21 @@ namespace xchwallet
         {
             return WalletTxs.SingleOrDefault(t => t.DepositCode == depositCode);
         }
+
+        public RecipientParams RecipientParamsGet(FiatWalletTx tx)
+        {
+            return RecipientParams.SingleOrDefault(r => r.FiatWalletTxId == tx.Id);
+        }
+    }
+
+    public class RecipientParams
+    {
+        public int Id { get; set; }
+        public int FiatWalletTxId { get; set; }
+        public virtual FiatWalletTx FiatWalletTx { get; set; }
+        public string Reference { get; set; }
+        public string Code { get; set; }
+        public string Particulars { get; set; }
     }
 
     public class BankTx
