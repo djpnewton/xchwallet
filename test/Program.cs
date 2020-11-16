@@ -495,7 +495,7 @@ namespace test
             if (opts.Tags != null)
                 tagList = opts.Tags.Split(',');
             else
-                tagList = wallet.GetTags().Select(t => t.Tag);
+                tagList = wallet.GetTags().Select(t => t.Tag).ToList();
             var balance = wallet.GetBalance(tagList, opts.MinimumConfirmations);
             Console.WriteLine($"  balance       : {balance} ({wallet.AmountToString(balance)} {wallet.Type()})");
             balance = walletFast.GetBalance(tagList, opts.MinimumConfirmations);
